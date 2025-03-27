@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
 import os
+import psycopg2
 from abc import ABC, abstractmethod
+from psycopg2 import sql
+from psycopg2.extras import execute_values
+import getpass
 
 class DataProcessor(ABC):
     @abstractmethod
@@ -68,7 +72,134 @@ class CleanProcessor(DataProcessor):
         except Exception as e:
             print(f"Error durante limpieza: {str(e)}")
             return df
+
+class DatabaseManager:
+    """Manejador de conexión y operaciones con PostgreSQL"""
+    def __init__(self):
+        self.connection = None
+    
+    def connect(self):
+        """Establece conexión con PostgreSQL"""
+        print("\nConfiguración de conexión a PostgreSQL:")
+        host = input("Host (localhost): ") or "localhost"
+        database = input("Nombre de la base de datos: ")
+        user = input("Usuario: ")
+        password = getpass.getpass("Contraseña: ")
+        port = input("Puerto (5432): ") or "5432"
         
+        try:
+            self.connection = psycopg2.connect(
+                host=host,
+                database=database,
+                user=user,
+                password=password,
+                port=port
+            )
+            print("¡Conexión exitosa a PostgreSQL!")
+            return True
+        except Exception as e:
+            print(f"Error al conectar a PostgreSQL: {e}")
+            return False
+    
+    def disconnect(self):
+        """Cierra la conexión con la base de datos"""
+        if self.connection:
+            self.connection.close()
+            print("Conexión a PostgreSQL cerrada.")
+    
+    def save_to_db(self, df, table_name):
+        """Guarda el DataFrame en una tabla de PostgreSQL"""
+        if not self.connection:
+            print("No hay conexión a la base de datos.")
+            return False
+        
+        try:
+            cursor = self.connection.cursor()
+            
+            # Crear tabla si no existe
+            columns = []
+            for col, dtype in df.dtypes.items():
+                if pd.api.types.is_integer_dtype(dtype):
+                    sql_type = "INTEGER"
+                elif pd.api.types.is_float_dtype(dtype):
+                    sql_type = "FLOAT"
+                elif pd.api.types.is_datetime64_any_dtype(dtype):
+                    sql_type = "TIMESTAMP"
+                elif pd.api.types.is_bool_dtype(dtype):
+                    sql_type = "BOOLEAN"
+                else:
+                    sql_type = "TEXT"
+                
+                columns.append(sql.Identifier(col) + sql.SQL(" ") + sql.SQL(sql_type))
+            
+            create_table_query = sql.SQL("""
+                CREATE TABLE IF NOT EXISTS {} (
+                    {}
+                )
+            """).format(
+                sql.Identifier(table_name),
+                sql.SQL(",\n    ").join(columns)
+            )
+            
+            cursor.execute(create_table_query)
+            self.connection.commit()
+            
+            # Insertar datos
+            columns = [sql.Identifier(col) for col in df.columns]
+            values = [sql.Placeholder()] * len(df.columns)
+            
+            insert_query = sql.SQL("""
+                INSERT INTO {} ({})
+                VALUES %s
+                ON CONFLICT DO NOTHING
+            """).format(
+                sql.Identifier(table_name),
+                sql.SQL(", ").join(columns)
+            )
+            
+            # Convertir DataFrame a lista de tuplas
+            data_tuples = [tuple(x) for x in df.to_numpy()]
+            
+            execute_values(cursor, insert_query, data_tuples)
+            self.connection.commit()
+            
+            print(f"Datos guardados exitosamente en la tabla '{table_name}'")
+            return True
+        except Exception as e:
+            print(f"Error al guardar en PostgreSQL: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+    
+    def load_from_db(self, table_name):
+        """Carga datos desde una tabla de PostgreSQL"""
+        if not self.connection:
+            print("No hay conexión a la base de datos.")
+            return None
+        
+        try:
+            cursor = self.connection.cursor()
+            
+            query = sql.SQL("SELECT * FROM {}").format(
+                sql.Identifier(table_name)
+            )
+            
+            cursor.execute(query)
+            columns = [desc[0] for desc in cursor.description]
+            data = cursor.fetchall()
+            
+            df = pd.DataFrame(data, columns=columns)
+            print(f"Datos cargados exitosamente desde la tabla '{table_name}'")
+            return df
+        except Exception as e:
+            print(f"Error al cargar desde PostgreSQL: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+
 # ----------------------------
 # Sistema Principal
 # ----------------------------
@@ -77,69 +208,85 @@ class HotelDataSystem:
         self.processors = [
             DateProcessor(),    # Angel
             CleanProcessor(),   # Balam
-
         ]
+        self.db_manager = DatabaseManager()
     
     def load_data(self):
-        """Carga datos desde archivo"""
+        """Carga datos desde archivo o base de datos"""
         while True:
-            file_path = input("Ingrese ruta del archivo (CSV/JSON/XLSX): ")
-            try:
-                if file_path.endswith('.csv'):
-                    return pd.read_csv(file_path)
-                elif file_path.endswith('.json'):
-                    return pd.read_json(file_path)
-                elif file_path.endswith(('.xlsx', '.xls')):
-                    return pd.read_excel(file_path)
-                else:
-                    print("Formato no soportado. Use CSV, JSON o XLSX.")
-            except Exception as e:
-                print(f"Error al cargar: {e}. Intente nuevamente.")
+            print("\nOpciones de carga:")
+            print("1. Desde archivo (CSV/JSON/XLSX)")
+            print("2. Desde PostgreSQL")
+            choice = input("Seleccione opción (1/2): ")
+            
+            if choice == '1':
+                file_path = input("Ingrese ruta del archivo (CSV/JSON/XLSX): ")
+                try:
+                    if file_path.endswith('.csv'):
+                        return pd.read_csv(file_path)
+                    elif file_path.endswith('.json'):
+                        return pd.read_json(file_path)
+                    elif file_path.endswith(('.xlsx', '.xls')):
+                        return pd.read_excel(file_path)
+                    else:
+                        print("Formato no soportado. Use CSV, JSON o XLSX.")
+                except Exception as e:
+                    print(f"Error al cargar: {e}. Intente nuevamente.")
+            elif choice == '2':
+                if self.db_manager.connect():
+                    table_name = input("Nombre de la tabla a cargar: ")
+                    df = self.db_manager.load_from_db(table_name)
+                    if df is not None:
+                        return df
+            else:
+                print("Opción inválida. Intente nuevamente.")
 
     def save_data(self, df):
         """Guarda los datos procesados"""
         while True:
-            choice = input("Guardar como (1)CSV, (2)JSON, (3)Excel: ")
-            path = input("Ruta de guardado: ")
-            try:
-                if choice == '1':
-                    if not path.lower().endswith('.csv'):
-                        path += '.csv'  # Fuerza extensión .csv
-                    try:
+            print("\nOpciones de guardado:")
+            print("1. CSV")
+            print("2. JSON")
+            print("3. Excel")
+            print("4. PostgreSQL")
+            choice = input("Seleccione formato (1/2/3/4): ")
+            
+            if choice in ('1', '2', '3'):
+                path = input("Ruta de guardado: ")
+                try:
+                    if choice == '1':
+                        if not path.lower().endswith('.csv'):
+                            path += '.csv'
                         df.to_csv(path, index=False)
-                    except Exception as e:
-                        print(f"Error al guardar CSV: {e}")
-                        continue
-                        
-                elif choice == '2':
-                    if not path.lower().endswith('.json'):
-                        path += '.json'  # Fuerza extensión .json
-                    try:
+                    elif choice == '2':
+                        if not path.lower().endswith('.json'):
+                            path += '.json'
                         df.to_json(path, orient='records')
-                    except Exception as e:
-                        print(f"Error al guardar JSON: {e}")
-                        continue
-                        
-                elif choice == '3':
-                    if not path.lower().endswith('.xlsx'):
-                        path += '.xlsx'  # Fuerza extensión .xlsx
-                    try:
+                    elif choice == '3':
+                        if not path.lower().endswith('.xlsx'):
+                            path += '.xlsx'
                         df.to_excel(path, index=False)
-                    except Exception as e:
-                        print(f"Error al guardar Excel: {e}")
-                        continue
-                else:
-                    print("Opción inválida")
+                    print("Datos guardados exitosamente!")
+                    break
+                except Exception as e:
+                    print(f"Error al guardar: {e}")
+            elif choice == '4':
+                if not self.db_manager.connection and not self.db_manager.connect():
                     continue
-                print("Datos guardados exitosamente!")
-                break
-            except Exception as e:
-                print(f"Error al guardar: {e}")
+                table_name = input("Nombre de la tabla destino: ")
+                if self.db_manager.save_to_db(df, table_name):
+                    break
+            else:
+                print("Opción inválida")
 
     def run(self):
         """Ejecuta el sistema"""
         print("=== Sistema de Procesamiento de Datos Hotel ===")
         df = self.load_data()
+        
+        if df is None or df.empty:
+            print("No se pudieron cargar datos. Saliendo...")
+            return
         
         for processor in self.processors:
             df = processor.process(df)
@@ -147,6 +294,9 @@ class HotelDataSystem:
         print("\nProcesamiento completado. Resumen:")
         print(df.info())
         self.save_data(df)
+        
+        # Cerrar conexión a la base de datos si está abierta
+        self.db_manager.disconnect()
 
 if __name__ == "__main__":
     system = HotelDataSystem()
