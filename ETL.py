@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 import getpass
+from matplotlib import pyplot as plt
 
 class DataProcessor(ABC):
     @abstractmethod
@@ -43,6 +44,49 @@ class DateProcessor(DataProcessor):
             print(f"Error en procesamiento de fechas: {e}")
             return df
 
+class ReservationGrouping(DataProcessor):
+    """
+    Funciones Pandas únicas:
+    1. pd.to_datetime() - Conversión a tipo fecha
+    2. dt.to_period() - Extracción de periodo (mes-año)
+    3. pivot_table() - Agrupamiento multidimensional
+    
+    Objetivo: Analizar reservas mensuales por tipo de hotel y visualizar tendencias
+    """
+    def process(self, df):
+        try:
+            # Función 1 (única): Convertir a datetime
+            df['arrival_date'] = pd.to_datetime(df['arrival_date'])
+            
+            # Función 2 (única): Crear periodo año-mes
+            arrival_year_month = df['arrival_date'].dt.to_period('M')
+            
+            # Función 3 (única): Crear tabla pivote para agrupamiento
+            reservas_por_mes = df.pivot_table(
+                index=arrival_year_month,
+                columns='hotel',
+                values='is_canceled',  # Usamos cualquier columna para contar
+                aggfunc='count',
+                fill_value=0
+            )
+            
+            # Generar visualización
+            reservas_por_mes.plot(
+                kind='bar',
+                figsize=(12, 6),
+                title='Reservas por Mes y Tipo de Hotel',
+                xlabel='Mes de Llegada',
+                ylabel='Número de Reservas'
+            )
+            
+            plt.show()
+            
+            return df
+        except Exception as e:
+            print(f"Error en agrupamiento de reservas: {e}")
+            return df
+    
+
 class CleanProcessor(DataProcessor):
     """
     Funciones Pandas únicas:
@@ -72,6 +116,8 @@ class CleanProcessor(DataProcessor):
         except Exception as e:
             print(f"Error durante limpieza: {str(e)}")
             return df
+
+
 
 class DatabaseManager:
     """Manejador de conexión y operaciones con PostgreSQL"""
@@ -209,6 +255,13 @@ class HotelDataSystem:
             DateProcessor(),    # Angel
             CleanProcessor(),   # Balam
         ]
+        self.predictors = [
+            
+        ]
+        
+        self.analizers = [
+            ReservationGrouping(),  # Balam
+        ]
         self.db_manager = DatabaseManager()
     
     def load_data(self):
@@ -293,7 +346,32 @@ class HotelDataSystem:
         
         print("\nProcesamiento completado. Resumen:")
         print(df.info())
-        self.save_data(df)
+        
+        save_data_option = 5
+        exit_option = 6
+        
+        while True:
+            print("\nAnalisis:")
+            print("1. Cantidad de reservaciones por mes\n")
+            print(f"{save_data_option}. Guardar datos")
+            print(f"{exit_option}. Salir")
+            
+            try:
+                analyzer_option = int(input("\nEscoja una opción: "))
+            except ValueError:
+                input("Ingrese un input valido")
+                continue
+            
+            if analyzer_option == exit_option:
+                break
+            elif analyzer_option == save_data_option:
+                self.save_data(df)
+            elif analyzer_option not in range(1, len(self.analizers) + 1):
+                input("Ingrese una opcion valida")
+                continue
+            else:
+                self.analizers[analyzer_option - 1].process(df)
+
         
         # Cerrar conexión a la base de datos si está abierta
         self.db_manager.disconnect()

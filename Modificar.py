@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 try:
-    file_path = "ETL/hotel_bookings.csv"
+    file_path = "hotel_bookings.csv"
     
     if not os.path.exists(file_path):
         print(f"Error: El archivo {file_path} no existe en la ubicación actual.")
