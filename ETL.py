@@ -116,6 +116,86 @@ class CleanProcessor(DataProcessor):
         except Exception as e:
             print(f"Error durante limpieza: {str(e)}")
             return df
+        
+class PredictiveFeaturesProcessor(DataProcessor):
+    """
+    Funciones Pandas únicas:
+    1. pd.cut() - Discretización de variables continuas
+    2. pd.get_dummies() - Codificación one-hot
+    3. pd.qcut() + groupby().transform() - Creación de características agregadas
+    
+    Objetivo: Preparar características para modelo predictivo de cancelaciones
+    """
+    def process(self, df):
+        try:
+
+            # Validar columnas requeridas
+            required_columns = {
+                'lead_time', 'deposit_type', 'meal', 'customer_type', 
+                'market_segment', 'adr', 'is_canceled',
+                'stays_in_weekend_nights', 'stays_in_week_nights'
+            }
+            missing_columns = required_columns - set(df.columns)
+            if missing_columns:
+                raise ValueError(f"Columnas requeridas faltantes: {missing_columns}")
+            
+
+            # Eliminar filas con valores nulos en columnas críticas
+            critical_cols = ['lead_time', 'adr']
+            initial_rows = len(df)
+            df.dropna(subset=critical_cols, inplace=True)
+            if len(df) < initial_rows:
+                print(f"Advertencia: Se eliminaron {initial_rows - len(df)} filas con valores nulos en columnas críticas")
+            
+            # Función 1 
+            # Propósito: convertir la variable lead_time (tiempo de anticipación de la reserva) en categorías que puedan ser más útiles para el modelo predictivo.
+            
+            # Definir bins para categorizar el lead time
+            bins = [0, 7, 30, 90, 365, float('inf')]
+            labels = ['Último momento (0-7)', 'Corto plazo (8-30)', 
+                    'Mediano plazo (31-90)', 'Largo plazo (91-365)', 
+                    'Muy anticipado (>365)']
+            
+            df['lead_time_category'] = pd.cut(
+                df['lead_time'],
+                bins=bins,
+                labels=labels,
+                right=False
+            )
+
+            # funcion 2
+            # Propósito: Convertir variables categóricas como deposit_type y meal en formato numérico para el modelo.
+
+            # Pre-calcular antes de eliminar market_segment
+            market_cancel_rate = df.groupby('market_segment')['is_canceled'].mean()
+            
+            # Columnas importantes para predecir cancelaciones
+            cols_to_encode = ['deposit_type', 'meal', 'customer_type', 'market_segment']
+            encoded = pd.get_dummies(df[cols_to_encode], prefix=cols_to_encode, drop_first=True)
+            
+            df = pd.concat([df, encoded], axis=1) 
+
+            # Mapear tasas de cancelación antes de eliminar
+            df['market_segment_cancel_rate'] = df['market_segment'].map(market_cancel_rate)
+            df.drop(columns=cols_to_encode, inplace=True)
+           
+            # funcion 3
+            # Propósito: Crear características agregadas como el "ADR promedio por tipo de cliente" que pueden ser predictores importantes.
+
+             # Discretizar ADR (tarifa diaria promedio) en cuantiles
+            df['adr_quantile'] = pd.qcut(df['adr'], q=4, labels=False)
+            
+            # Calcular tasa de cancelación promedio por segmento de mercado
+            market_cancel_rate = df.groupby('market_segment')['is_canceled'].mean()
+            df['market_segment_cancel_rate'] = df['market_segment'].map(market_cancel_rate)
+            
+            # Calcular días totales de estadía
+            df['total_nights'] = df['stays_in_weekend_nights'] + df['stays_in_week_nights']
+            
+            return df
+        except Exception as e:
+            print(f"Error en preparación de características predictivas: {e}")
+            return df
 
 
 
@@ -256,7 +336,7 @@ class HotelDataSystem:
             CleanProcessor(),   # Balam
         ]
         self.predictors = [
-            
+            PredictiveFeaturesProcessor() #Héctor
         ]
         
         self.analizers = [
