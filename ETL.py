@@ -198,6 +198,59 @@ class PredictiveFeaturesProcessor(DataProcessor):
             return df
 
 
+class SeasonalAnalysisProcessor(DataProcessor):
+    """
+    Procesador de análisis estacional.
+
+    Funciones Pandas únicas:
+    1. .dt.month_name() - Extrae el nombre del mes desde fechas.
+    2. groupby().size() - Cuenta cuántas reservas hubo por mes.
+    3. sort_values() - Ordena los resultados por cantidad de reservas.
+
+    Objetivo: Identificar temporadas altas y bajas de reservaciones.
+    """
+    def process(self, df):
+        try:
+            print("\n- Análisis de reservas por mes")
+            
+            # Asegurarse de que arrival_date sea tipo datetime
+            if not pd.api.types.is_datetime64_any_dtype(df['arrival_date']):
+                df['arrival_date'] = pd.to_datetime(df['arrival_date'], errors='coerce')
+
+            # Función 1: Extraer nombre del mes
+            df['arrival_month'] = df['arrival_date'].dt.month_name()
+
+            # Función 2: Agrupar por mes y contar reservas
+            reservas_por_mes = df.groupby('arrival_month').size().reset_index(name='total_reservas')
+
+            # Función 3: Ordenar por número de reservas
+            reservas_por_mes = reservas_por_mes.sort_values('total_reservas', ascending=False)
+            reservas_por_mes = reservas_por_mes.reset_index(drop=True)
+
+            print(reservas_por_mes)
+
+            """"
+            # Gráfico
+            reservas_por_mes.plot(
+                kind='bar',
+                x='arrival_month',
+                y='total_reservas',
+                title='Reservas por Mes (Temporadas)',
+                xlabel='Mes',
+                ylabel='Total de Reservas',
+                figsize=(10, 5)
+            )
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig("reservas_por_mes.png")
+            plt.close()
+            """
+
+            return df
+        except Exception as e:
+            print(f"Error en análisis estacional: {e}")
+            return df
+
 
 class DatabaseManager:
     """Manejador de conexión y operaciones con PostgreSQL"""
@@ -334,6 +387,7 @@ class HotelDataSystem:
         self.processors = [
             DateProcessor(),    # Angel
             CleanProcessor(),   # Balam
+            SeasonalAnalysisProcessor(),    # Diana
         ]
         self.predictors = [
             PredictiveFeaturesProcessor() #Héctor
