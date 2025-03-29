@@ -192,12 +192,11 @@ class SeasonalAnalysisProcessor(DataProcessor):
     - season: Temporada del año (Invierno, Primavera, Verano, Otoño)
     - demand_period: Temporada de demanda (Alta, Media, Baja)
     
-    Funciones pandas únicas utilizadas:
-    11. dt.is_quarter_start - Identifica inicio de trimestre
-    12. dt.dayofyear - Obtiene día del año (1-365)
-    13. pd.Series.map - Mapeo personalizado de valores
-    14. pd.Series.replace - Reemplazo condicional de valores
-    15. dt.to_period - Conversión a periodo trimestral
+    Funciones pandas únicas:
+    11. dt.month - Extrae el mes de la fecha
+    12. pd.Series.map - Mapeo personalizado de valores
+    13. dt.is_quarter_start - Identifica inicio de trimestre (para lógica de temporada)
+    14. dt.to_period('Q') - Conversión a periodo trimestral (para análisis agregado)
     """
     def process(self, df):
         """
@@ -212,7 +211,7 @@ class SeasonalAnalysisProcessor(DataProcessor):
             if not pd.api.types.is_datetime64_any_dtype(df['arrival_date']):
                 df['arrival_date'] = pd.to_datetime(df['arrival_date'], errors='coerce')
             
-            # 1. Crear columna de temporada (season) usando dayofyear y mapeo condicional
+            # 1. Crear columna de temporada (season) usando mapeo condicional
             season_rules = {
                 1: 'Winter', 2: 'Winter', 3: 'Spring',
                 4: 'Spring', 5: 'Spring', 6: 'Summer',
@@ -221,36 +220,39 @@ class SeasonalAnalysisProcessor(DataProcessor):
             }
             df['season'] = df['arrival_date'].dt.month.map(season_rules)
             
-            # 2. Crear columna de periodo de demanda (demand_period) usando lógica de negocio
-            # Definir reglas de temporada alta/media/baja (ajustar según necesidades)
+            # 2. Crear columna de periodo de demanda (demand_period) 
+            # Usando inicio de trimestre (is_quarter_start) como parte de la lógica
             def get_demand_period(date):
-                month = date.month
-                day = date.day
+                # Usamos is_quarter_start para identificar cambios estacionales importantes
+                is_q_start = date.is_quarter_start
                 
-                # Temporada alta (ejemplo: verano y festivos)
-                if month in [6, 7, 8] or (month == 12 and day > 15):
+                # Usamos to_period para agrupar por trimestres
+                quarter = date.to_period('Q').quarter
+                
+                # Lógica mejorada que considera el trimestre y si es inicio
+                if quarter in [2, 3] or (quarter == 4 and date.month == 12 and date.day > 15):
                     return 'High'
-                # Temporada media (ejemplo: primavera y puentes)
-                elif month in [4, 5, 9, 10] or (month == 3 and day > 20):
+                elif (quarter in [1, 4] and not is_q_start) or (quarter == 2 and date.month == 5):
                     return 'Normal'
-                # Temporada baja
                 else:
                     return 'Low'
             
             df['demand_period'] = df['arrival_date'].apply(get_demand_period)
             
-            # 3. Análisis agregado por temporada y demanda (usando funciones no listadas)
-            season_stats = df.pivot_table(
-                index=['season', 'demand_period'],
-                values='is_canceled',
-                aggfunc=['count', 'mean']
-            ).reset_index()
+            # 3. Análisis agregado por trimestre usando to_period
+            df['arrival_quarter'] = df['arrival_date'].dt.to_period('Q')
+            quarter_stats = df.groupby('arrival_quarter').agg({
+                'is_canceled': ['count', 'mean'],
+                'adr': 'mean'
+            }).reset_index()
             
-            season_stats.columns = ['season', 'demand_period', 'total_reservations', 'cancellation_rate']
+            quarter_stats.columns = ['quarter', 'total_reservations', 'cancellation_rate', 'avg_daily_rate']
             
-            print("\nProcesamiento estacional y de temporada completado\n")
+            print("\nProcesamiento estacional y de temporada completado")
+            print("\nEstadísticas por trimestre:")
+            print(quarter_stats.to_string(index=False))
             
-            return df
+            return df.drop('arrival_quarter', axis=1)  # Eliminamos la columna temporal
         
         except Exception as e:
             print(f"Error en análisis estacional: {e}")
