@@ -39,7 +39,7 @@ class RawDatabaseManager:
             print("Conexión a PostgreSQL cerrada.")
     
     def save_raw_data(self, df, table_name):
-        """Guarda el DataFrame en PostgreSQL SIN procesamiento"""
+        """Guarda el DataFrame en PostgreSQL conservando los tipos de datos"""
         if not self.connection:
             print("No hay conexión a la base de datos.")
             return False
@@ -47,11 +47,21 @@ class RawDatabaseManager:
         try:
             cursor = self.connection.cursor()
             
-            # Crear tabla con tipos de datos genéricos para preservar formato original
+            # Mapeo de tipos de pandas a PostgreSQL
+            type_mapping = {
+                'object': 'TEXT',
+                'int64': 'BIGINT',
+                'float64': 'DOUBLE PRECISION',
+                'bool': 'BOOLEAN',
+                'datetime64[ns]': 'TIMESTAMP',
+                'timedelta64[ns]': 'INTERVAL'
+            }
+            
+            # Crear tabla con tipos específicos
             columns = []
-            for col in df.columns:
-                # Usamos TEXT para todo para preservar el formato original
-                columns.append(sql.Identifier(col) + sql.SQL(" TEXT"))
+            for col, dtype in zip(df.columns, df.dtypes):
+                pg_type = type_mapping.get(str(dtype), 'TEXT')
+                columns.append(sql.Identifier(col) + sql.SQL(f" {pg_type}"))
             
             create_table_query = sql.SQL("""
                 DROP TABLE IF EXISTS {};
@@ -67,7 +77,7 @@ class RawDatabaseManager:
             cursor.execute(create_table_query)
             self.connection.commit()
             
-            # Insertar datos tal cual están
+            # Insertar datos conservando tipos
             columns = [sql.Identifier(col) for col in df.columns]
             insert_query = sql.SQL("""
                 INSERT INTO {} ({})
@@ -77,20 +87,20 @@ class RawDatabaseManager:
                 sql.SQL(", ").join(columns)
             )
             
-            # Convertir DataFrame a lista de tuplas manteniendo valores exactos
-            data_tuples = [tuple(str(x) if not pd.isna(x) else None for x in row) 
-                         for row in df.itertuples(index=False)]
+            # Convertir DataFrame manteniendo tipos nativos
+            data_tuples = [tuple(x if not pd.isna(x) else None for x in row) 
+                        for row in df.itertuples(index=False)]
             
             execute_values(cursor, insert_query, data_tuples)
             self.connection.commit()
             
-            print(f"\nDatos crudos guardados exitosamente en la tabla '{table_name}'")
-            print(f"- Total de registros: {len(df)}")
-            print(f"- Columnas: {df.columns.tolist()}")
+            print(f"\nDatos guardados exitosamente en '{table_name}'")
+            print(f"- Registros: {len(df)}")
+            print(f"- Esquema:\n{df.dtypes.to_string()}")
             
             return True
         except Exception as e:
-            print(f"Error al guardar datos crudos: {e}")
+            print(f"Error al guardar datos: {e}")
             self.connection.rollback()
             return False
         finally:

@@ -33,23 +33,23 @@ class DateProcessor(DataProcessor):
             - df: DataFrame con fechas estandarizadas y estadías calculadas
         """
         try:
-            # Función 1 
+            # Solo procesar si la columna no existe
             df['reservation_status_date'] = pd.to_datetime(df['reservation_status_date'], errors='coerce')
             
-            # Función 2 
-            df['arrival_date'] = pd.to_datetime(
-                df['arrival_date_year'].astype(str) + '-' +
-                df['arrival_date_month'] + '-' +
-                df['arrival_date_day_of_month'].astype(str)
-            ).dt.strftime('%Y-%m-%d')
+            if 'arrival_date' not in df.columns:  # Solo crear si no existe
+                df['arrival_date'] = pd.to_datetime(
+                    df['arrival_date_year'].astype(str) + '-' +
+                    df['arrival_date_month'] + '-' +
+                    df['arrival_date_day_of_month'].astype(str)
+                ).dt.strftime('%Y-%m-%d')
             
-            # Función 3 
-            df['total_stay'] = (pd.to_datetime(df['reservation_status_date']) - 
-                               pd.to_datetime(df['arrival_date'])).dt.days
-            print("\nProcesamiento de fechas completado.\n")
+            if 'total_stay' not in df.columns:  # Solo crear si no existe
+                df['total_stay'] = (pd.to_datetime(df['reservation_status_date']) - 
+                                  pd.to_datetime(df['arrival_date'])).dt.days
+            print("\nProcesamiento de fechas completado.\n", flush=True)
             return df
         except Exception as e:
-            print(f"Error en procesamiento de fechas: {e}")
+            print(f"Error en procesamiento de fechas: {e}", flush=True)
             return df
 
 class CleanProcessor(DataProcessor):
@@ -102,15 +102,15 @@ class CleanProcessor(DataProcessor):
             
             df = df.drop_duplicates(subset=duplicate_subset, keep='first')
                         
-            print(f"\nEliminacion de instancias con valores vacios o duplicadas completada:\n")
-            print(f"Registros duplicados encontrados: {duplicates.sum()}")
-            print(f"- Filas eliminadas: {initial_count - len(df)}")
-            print(f"- Valores nulos restantes por columna:")
-            print(df.isna().sum())
+            print(f"\nEliminacion de instancias con valores vacios o duplicadas completada:\n", flush=True)
+            print(f"Registros duplicados encontrados: {duplicates.sum()}", flush=True)
+            print(f"- Filas eliminadas: {initial_count - len(df)}", flush=True)
+            print(f"- Valores nulos restantes por columna:", flush=True)
+            print(df.isna().sum(), flush=True)
             
             return df
         except Exception as e:
-            print(f"Error durante limpieza: {str(e)}")
+            print(f"Error durante limpieza: {str(e)}", flush=True)
             return df
         
 class PredictiveFeaturesProcessor(DataProcessor):
@@ -131,8 +131,6 @@ class PredictiveFeaturesProcessor(DataProcessor):
             - df: DataFrame con características predictivas agregadas
         """
         try:
-
-            # Validar columnas requeridas
             required_columns = {
                 'lead_time', 'deposit_type', 'meal', 'customer_type', 
                 'market_segment', 'adr', 'is_canceled',
@@ -142,47 +140,49 @@ class PredictiveFeaturesProcessor(DataProcessor):
             if missing_columns:
                 raise ValueError(f"Columnas requeridas faltantes: {missing_columns}")
             
-             # Funcion 1. Categorización de lead_time
-            bins = [0, 7, 30, 90, 365, float('inf')]
-            labels = ['Last minute (0-7)', 'Short term (8-30)', 
-                    'Medium term (31-90)', 'Long term (91-365)', 
-                    'Very early (>365)']
-            
-            df['lead_time_category'] = pd.cut(
-                df['lead_time'],
-                bins=bins,
-                labels=labels,
-                right=False
-            ).astype(str)  # Convertir a string para mejor compatibilidad
+            # Solo crear si no existe
+            if 'lead_time_category' not in df.columns:
+                bins = [0, 7, 30, 90, 365, float('inf')]
+                labels = ['Last minute (0-7)', 'Short term (8-30)', 
+                        'Medium term (31-90)', 'Long term (91-365)', 
+                        'Very early (>365)']
+                
+                df['lead_time_category'] = pd.cut(
+                    df['lead_time'],
+                    bins=bins,
+                    labels=labels,
+                    right=False
+                ).astype(str)
 
-            # Funcion 2. Codificación one-hot
+            # Solo hacer codificación one-hot si las columnas no existen
             cols_to_encode = ['deposit_type', 'meal', 'customer_type', 'market_segment']
+            new_cols = [f"{col}_{val}" for col in cols_to_encode for val in df[col].unique()]
             
-            encoded = pd.get_dummies(df[cols_to_encode], prefix=cols_to_encode, drop_first=False)
-            encoded = encoded.astype(int)
-            
-            df = pd.concat([df, encoded], axis=1)
+            if not any(col in df.columns for col in new_cols):
+                encoded = pd.get_dummies(df[cols_to_encode], prefix=cols_to_encode, drop_first=False)
+                encoded = encoded.astype(int)
+                df = pd.concat([df, encoded], axis=1)
 
-            # Funcion 3. Características agregadas 
-            # Calcular tasa de cancelación por segmento (una sola vez)
-            market_cancel_rate = df.groupby('market_segment')['is_canceled'].mean()
-            df['market_segment_cancel_rate'] = df['market_segment'].map(market_cancel_rate)
+            # Solo crear si no existe
+            if 'market_segment_cancel_rate' not in df.columns:
+                market_cancel_rate = df.groupby('market_segment')['is_canceled'].mean()
+                df['market_segment_cancel_rate'] = df['market_segment'].map(market_cancel_rate)
             
-            # Discretizar ADR 
-            df['adr_quantile'] = pd.qcut(
-                df['adr'], 
-                q=4, 
-                labels=['Q1', 'Q2', 'Q3', 'Q4'] 
-            ).astype(str)
+            if 'adr_quantile' not in df.columns:
+                df['adr_quantile'] = pd.qcut(
+                    df['adr'], 
+                    q=4, 
+                    labels=['Q1', 'Q2', 'Q3', 'Q4'] 
+                ).astype(str)
             
-            # Total de noches
-            df['total_nights'] = df['stays_in_weekend_nights'] + df['stays_in_week_nights']
+            if 'total_nights' not in df.columns:
+                df['total_nights'] = df['stays_in_weekend_nights'] + df['stays_in_week_nights']
             
-            print("\nProcesamiento para el agregado de características predictivas completado.\n")
+            print("\nProcesamiento para el agregado de características predictivas completado.\n", flush=True)
             
             return df
         except Exception as e:
-            print(f"Error en preparación de características predictivas: {e}")
+            print(f"Error en preparación de características predictivas: {e}", flush=True)
             return df
 
 
@@ -207,39 +207,35 @@ class SeasonalAnalysisProcessor(DataProcessor):
             - df: DataFrame con columnas de temporada y periodo de demanda
         """
         try:
-            # Convertir a datetime si no lo está
             if not pd.api.types.is_datetime64_any_dtype(df['arrival_date']):
                 df['arrival_date'] = pd.to_datetime(df['arrival_date'], errors='coerce')
             
-            # 1. Crear columna de temporada (season) usando mapeo condicional
-            season_rules = {
-                1: 'Winter', 2: 'Winter', 3: 'Spring',
-                4: 'Spring', 5: 'Spring', 6: 'Summer',
-                7: 'Summer', 8: 'Summer', 9: 'Autumn',
-                10: 'Autumn', 11: 'Autumn', 12: 'Winter'
-            }
-            df['season'] = df['arrival_date'].dt.month.map(season_rules)
+            # Solo crear si no existe
+            if 'season' not in df.columns:
+                season_rules = {
+                    1: 'Winter', 2: 'Winter', 3: 'Spring',
+                    4: 'Spring', 5: 'Spring', 6: 'Summer',
+                    7: 'Summer', 8: 'Summer', 9: 'Autumn',
+                    10: 'Autumn', 11: 'Autumn', 12: 'Winter'
+                }
+                df['season'] = df['arrival_date'].dt.month.map(season_rules)
             
-            # 2. Crear columna de periodo de demanda (demand_period) 
-            # Usando inicio de trimestre (is_quarter_start) como parte de la lógica
-            def get_demand_period(date):
-                # Usamos is_quarter_start para identificar cambios estacionales importantes
-                is_q_start = date.is_quarter_start
+            # Solo crear si no existe
+            if 'demand_period' not in df.columns:
+                def get_demand_period(date):
+                    is_q_start = date.is_quarter_start
+                    quarter = date.to_period('Q').quarter
+                    
+                    if quarter in [2, 3] or (quarter == 4 and date.month == 12 and date.day > 15):
+                        return 'High'
+                    elif (quarter in [1, 4] and not is_q_start) or (quarter == 2 and date.month == 5):
+                        return 'Normal'
+                    else:
+                        return 'Low'
                 
-                # Usamos to_period para agrupar por trimestres
-                quarter = date.to_period('Q').quarter
-                
-                # Lógica mejorada que considera el trimestre y si es inicio
-                if quarter in [2, 3] or (quarter == 4 and date.month == 12 and date.day > 15):
-                    return 'High'
-                elif (quarter in [1, 4] and not is_q_start) or (quarter == 2 and date.month == 5):
-                    return 'Normal'
-                else:
-                    return 'Low'
+                df['demand_period'] = df['arrival_date'].apply(get_demand_period)
             
-            df['demand_period'] = df['arrival_date'].apply(get_demand_period)
-            
-            # 3. Análisis agregado por trimestre usando to_period
+            # Esta columna es temporal y se elimina al final, no necesita verificación
             df['arrival_quarter'] = df['arrival_date'].dt.to_period('Q')
             quarter_stats = df.groupby('arrival_quarter').agg({
                 'is_canceled': ['count', 'mean'],
@@ -248,14 +244,14 @@ class SeasonalAnalysisProcessor(DataProcessor):
             
             quarter_stats.columns = ['quarter', 'total_reservations', 'cancellation_rate', 'avg_daily_rate']
             
-            print("\nProcesamiento estacional y de temporada completado")
-            print("\nEstadísticas por trimestre:")
-            print(quarter_stats.to_string(index=False))
+            print("\nProcesamiento estacional y de temporada completado", flush=True)
+            print("\nEstadísticas por trimestre:", flush=True)
+            print(quarter_stats.to_string(index=False), flush=True)
             
-            return df.drop('arrival_quarter', axis=1)  # Eliminamos la columna temporal
+            return df.drop('arrival_quarter', axis=1)
         
         except Exception as e:
-            print(f"Error en análisis estacional: {e}")
+            print(f"Error en análisis estacional: {e}", flush=True)
             return df
 
 
@@ -267,7 +263,7 @@ class DatabaseManager:
     
     def connect(self):
         """Establece conexión con PostgreSQL"""
-        print("\nConfiguración de conexión a PostgreSQL:")
+        print("\nConfiguración de conexión a PostgreSQL:", flush=True)
         host = input("Host (localhost): ") or "localhost"
         database = input("Nombre de la base de datos: ")
         user = input("Usuario: ")
@@ -282,22 +278,22 @@ class DatabaseManager:
                 password=password,
                 port=port
             )
-            print("¡Conexión exitosa a PostgreSQL!")
+            print("¡Conexión exitosa a PostgreSQL!", flush=True)
             return True
         except Exception as e:
-            print(f"Error al conectar a PostgreSQL: {e}")
+            print(f"Error al conectar a PostgreSQL: {e}", flush=True)
             return False
     
     def disconnect(self):
         """Cierra la conexión con la base de datos"""
         if self.connection:
             self.connection.close()
-            print("Conexión a PostgreSQL cerrada.")
+            print("Conexión a PostgreSQL cerrada.", flush=True)
     
     def save_to_db(self, df, table_name):
         """Guarda el DataFrame en una tabla de PostgreSQL"""
         if not self.connection:
-            print("No hay conexión a la base de datos.")
+            print("No hay conexión a la base de datos.", flush=True)
             return False
         
         try:
@@ -350,10 +346,10 @@ class DatabaseManager:
             execute_values(cursor, insert_query, data_tuples)
             self.connection.commit()
             
-            print(f"Datos guardados exitosamente en la tabla '{table_name}'")
+            print(f"Datos guardados exitosamente en la tabla '{table_name}'", flush=True)
             return True
         except Exception as e:
-            print(f"Error al guardar en PostgreSQL: {e}")
+            print(f"Error al guardar en PostgreSQL: {e}", flush=True)
             self.connection.rollback()
             return False
         finally:
@@ -363,7 +359,7 @@ class DatabaseManager:
     def load_from_db(self, table_name):
         """Carga datos desde una tabla de PostgreSQL"""
         if not self.connection:
-            print("No hay conexión a la base de datos.")
+            print("No hay conexión a la base de datos.", flush=True)
             return None
         
         try:
@@ -378,10 +374,10 @@ class DatabaseManager:
             data = cursor.fetchall()
             
             df = pd.DataFrame(data, columns=columns)
-            print(f"Datos cargados exitosamente desde la tabla '{table_name}\n")
+            print(f"Datos cargados exitosamente desde la tabla '{table_name}\n", flush=True)
             return df
         except Exception as e:
-            print(f"Error al cargar desde PostgreSQL: {e}")
+            print(f"Error al cargar desde PostgreSQL: {e}", flush=True)
             return None
         finally:
             if cursor:
@@ -418,10 +414,10 @@ class HotelDataSystem:
         
         """
         while True:
-            print("\nOpciones de carga:")
-            print("1. Desde archivo (CSV/JSON/XLSX)")
-            print("2. Desde PostgreSQL")
-            print("3. Salir")
+            print("\nOpciones de carga:", flush=True)
+            print("1. Desde archivo (CSV/JSON/XLSX)", flush=True)
+            print("2. Desde PostgreSQL", flush=True)
+            print("3. Salir", flush=True)
             choice = input("Seleccione opción: ")
             
             if choice == '1':
@@ -434,9 +430,9 @@ class HotelDataSystem:
                     elif file_path.endswith(('.xlsx', '.xls')):
                         return pd.read_excel(file_path)
                     else:
-                        print("Formato no soportado. Use CSV, JSON o XLSX.")
+                        print("Formato no soportado. Use CSV, JSON o XLSX.", flush=True)
                 except Exception as e:
-                    print(f"Error al cargar: {e}. Intente nuevamente.")
+                    print(f"Error al cargar: {e}. Intente nuevamente.", flush=True)
             elif choice == '2':
                 if self.db_manager.connect():
                     table_name = input("Nombre de la tabla a cargar: ")
@@ -446,7 +442,7 @@ class HotelDataSystem:
             elif choice == '3':
                 return None
             else:
-                print("Opción inválida. Intente nuevamente.")
+                print("Opción inválida. Intente nuevamente.", flush=True)
 
     def save_data(self, df):
         """
@@ -465,12 +461,12 @@ class HotelDataSystem:
         
         """
         while True:
-            print("\nOpciones de guardado:")
-            print("1. CSV")
-            print("2. JSON")
-            print("3. Excel")
-            print("4. PostgreSQL")
-            print("5. Salir")
+            print("\nOpciones de guardado:", flush=True)
+            print("1. CSV", flush=True)
+            print("2. JSON", flush=True)
+            print("3. Excel", flush=True)
+            print("4. PostgreSQL", flush=True)
+            print("5. Salir", flush=True)
             choice = input("Seleccione una opcion: ")
             
             if choice in ('1', '2', '3'):
@@ -490,7 +486,7 @@ class HotelDataSystem:
                         df.to_excel(path, index=False)
                     input("Datos guardados exitosamente!")
                 except Exception as e:
-                    print(f"Error al guardar: {e}")
+                    print(f"Error al guardar: {e}", flush=True)
             elif choice == '4':
                 if not self.db_manager.connection and not self.db_manager.connect():
                     continue
@@ -498,25 +494,25 @@ class HotelDataSystem:
                 if self.db_manager.save_to_db(df, table_name):
                     pass
             elif choice == '5':
-                print("Saliendo del sistema...")
+                print("Saliendo del sistema...", flush=True)
                 return
             else:
                 input("Opción inválida")
 
     def run(self):
         """Ejecuta el sistema"""
-        print("=== Sistema de Procesamiento de Datos Hotel ===")
+        print("=== Sistema de Procesamiento de Datos Hotel ===", flush=True)
         df = self.load_data()
         
         if df is None or df.empty:
-            print("No se pudieron cargar datos. Saliendo...")
+            print("No se pudieron cargar datos. Saliendo...", flush=True)
             return
         
         for processor in self.processors:
             df = processor.process(df)
         
-        print("\nProcesamiento completado. Resumen:")
-        print(df.info())
+        print("\nProcesamiento completado. Resumen:", flush=True)
+        print(df.info(), flush=True)
         
         self.save_data(df)
         
