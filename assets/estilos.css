@@ -1,0 +1,85 @@
+/* Fondo general y tipografía */
+body {
+    background-color: #f0f2f5;
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Título principal */
+h1 {
+    text-align: center;
+    color: #2c3e50;
+    padding: 20px;
+    font-size: 2.5rem;
+}
+
+/* Subtítulos */
+h3, h5, h6 {
+    color: #34495e;
+    padding-left: 15px;
+}
+
+/* Zona de carga de archivos */
+.dash-upload {
+    background-color: white;
+    border: 2px dashed #7f8c8d;
+    padding: 30px;
+    margin: 20px auto;
+    width: 80%;
+    text-align: center;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    border-radius: 12px;
+    transition: 0.3s ease-in-out;
+}
+
+.dash-upload:hover {
+    background-color: #ecf0f1;
+    border-color: #2980b9;
+}
+
+
+
+/* Botones y pestañas si decides agregarlos luego */
+.tab--selected {
+    background-color: #3498db !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+.tab {
+    font-size: 1rem;
+    padding: 10px;
+}
+
+/* General */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Tabla interactiva */
+.dash-table {
+    font-family: 'Segoe UI', sans-serif;
+    border-collapse: collapse;
+    width: 90%;
+    margin: 20px auto;
+    background-color: white;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.dash-table th, .dash-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+.dash-table th {
+    background-color: #3498db;
+    color: white;
+    text-align: center;
+}
+
+.dash-table td {
+    text-align: left;
+}
