@@ -1,59 +1,45 @@
-import base64
-import io
-import pandas as pd
-from dash import Dash, dcc, html, Output, Input, State, dash_table
-from ETL import DataProcessor, CleanProcessor
+from dash import Dash, dcc, html, Input, Output, callback
+import dash_bootstrap_components as dbc
 
+# Components
+from components.carga import layout as carga_layout
+from components.etl import layout as etl_layout
+from components.mining import layout as mining_layout
+from components.decision import layout as decision_layout
 
-app = Dash(__name__, suppress_callback_exceptions=True)
+# App
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app.layout = html.Div([
-    html.H1("Proyecto Final - Almacén de Datos", style={'textAlign': 'center'}),
-   
-   html.H3("Sube tu archivo (CSV, JSON o Excel)"),
-    dcc.Upload(
-        id='upload-data',
-        children=html.Div(['Arrastra un archivo aquí o haz clic para subir.']),
-        className='dash-upload',
-        multiple=False
-    ),
-    html.Div(id='output-data-upload')
-])
+# Layout
+app.layout = dbc.Container([
+    dcc.Store(id='stored-data'), # Store para guardar DataFrame procesado
+    html.H1("Sistema Hotelero - Análisis de Datos", className="mb-4"),
+    dcc.Tabs(id='tabs', value='carga', children=[
+        dcc.Tab(label='Carga de Datos', value='carga'),
+        dcc.Tab(label='ETL', value='etl'),
+        dcc.Tab(label='Minería de Datos', value='mining'),
+        dcc.Tab(label='Decisión', value='decision')
+    ]),
+    html.Div(id='tabs-content'),
+], fluid=True, className="p-4", style={'backgroundColor': '#f8f9fa'})
 
-def parse_contents(contents, filename):
-    content_type, content_string = contents.split(',')
-    decoded = base64.b64decode(content_string)
-    try:
-        if filename.endswith('.csv'):
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-        elif filename.endswith('.json'):
-            df = pd.read_json(io.StringIO(decoded.decode('utf-8')))
-        elif filename.endswith('.xlsx') or filename.endswith('.xls'):
-            df = pd.read_excel(io.BytesIO(decoded))
-        else:
-            return html.Div(['Formato de archivo no soportado.'])
-    except Exception as e:
-        return html.Div([f'Ocurrió un error al procesar el archivo: {e}'])
-
-    return html.Div([
-        html.H5(f"Archivo cargado: {filename}"),
-        html.P(f"Filas: {df.shape[0]}, Columnas: {df.shape[1]}"),
-        dash_table.DataTable(
-            data=df.head(10).to_dict('records'),
-            columns=[{'name': col, 'id': col} for col in df.columns],
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left'},
-        )
-    ])
-
-@app.callback(
-    Output('output-data-upload', 'children'),
-    Input('upload-data', 'contents'),
-    State('upload-data', 'filename')
+# Callbacks
+@callback(
+    Output('tabs-content', 'children'),
+    Input('tabs', 'value')
 )
-def update_output(contents, filename):
-    if contents is not None:
-        return parse_contents(contents, filename)
-
+def render_tab(tab_name):
+    if tab_name == 'carga':
+        return carga_layout
+    elif tab_name == 'etl':
+        return etl_layout
+    elif tab_name == 'mining':
+        return mining_layout
+    elif tab_name == 'decision':
+        return decision_layout
+    else:
+        return html.Div("Seleccione una pestaña válida.")
+    
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run_server(debug=True)  
+# -*- coding: utf-8 -*-
