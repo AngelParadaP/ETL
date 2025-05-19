@@ -262,6 +262,21 @@ class DatabaseManager:
     """Manejador de conexión y operaciones con PostgreSQL"""
     def __init__(self):
         self.connection = None
+        
+    def carga_connect(self, host, database, user, password, port):
+        try:
+            self.connection = psycopg2.connect(
+                host=host,
+                database=database,
+                user=user,
+                password=password,
+                port=port
+            )
+            print("¡Conexión exitosa a PostgreSQL!")
+            return True
+        except Exception as e:
+            print(f"Error al conectar a PostgreSQL: {e}")
+            return False
     
     def connect(self):
         """Establece conexión con PostgreSQL"""

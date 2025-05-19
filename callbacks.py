@@ -1,9 +1,11 @@
-from dash import Input, Output, State, html, dash_table
+from dash import Input, Output, State, html, dash_table, dcc, no_update
 import pandas as pd
 from ETL import DateProcessor, CleanProcessor, PredictiveFeaturesProcessor, SeasonalAnalysisProcessor
 import base64
 import io
 import plotly.express as px
+from ETL import DatabaseManager
+import dash
 
 # Función para leer y mostrar el archivo
 def parse_contents(contents, filename):
@@ -155,3 +157,135 @@ def register_callbacks(app):
     )
     def sync_dropdowns(selected_stat):
         return selected_stat, selected_stat
+    
+    
+    # Callback para conexión a DB
+    @app.callback(
+        Output('output-db-connection', 'children'),
+        Output('store-data', 'data', allow_duplicate=True),
+        Input('db-connect-btn', 'n_clicks'),
+        State('db-host', 'value'),
+        State('db-port', 'value'),
+        State('db-name', 'value'),
+        State('db-user', 'value'),
+        State('db-password', 'value'),
+        State('db-table', 'value'),
+        prevent_initial_call=True
+    )
+    def load_from_db(n_clicks, host, port, dbname, user, password, tabla):
+        if n_clicks:
+            try:
+                # Usar tu controlador para obtener datos
+                dbManager = DatabaseManager()
+                
+                dbManager.carga_connect(
+                    host=host,
+                    database=dbname,
+                    user=user,
+                    password=password,
+                    port=port
+                )
+                
+                df = dbManager.load_from_db(tabla)
+                
+                preview = html.Div([
+                    html.H5(f"Tabla cargada: {tabla}"),
+                    html.P(f"Filas: {df.shape[0]}, Columnas: {df.shape[1]}"),
+                    dash_table.DataTable(
+                        data=df.head(10).to_dict('records'),
+                        columns=[{"name": i, "id": i} for i in df.columns],
+                        style_table={"overflowX": "auto"},
+                        style_cell={"textAlign": "left", "minWidth": "100px"},
+                        page_size=10,
+                    )
+                ])
+                
+                # Mostrar el preview del archivo
+                preview = html.Div([
+                    html.H5(f"Tabla cargada: {tabla}"),
+                    html.P(f"Filas: {df.shape[0]}, Columnas: {df.shape[1]}"),
+                    dash_table.DataTable(
+                        data=df.head(10).to_dict('records'),
+                        columns=[{"name": i, "id": i} for i in df.columns],
+                        style_table={"overflowX": "auto"},
+                        style_cell={"textAlign": "left", "minWidth": "100px"},
+                        page_size=10,
+                    )
+                ])
+                
+                if df is not None:
+                    return preview, df.to_json(date_format='iso', orient='split')
+                    
+            except Exception as e:
+                return html.Div([
+                    html.H5("Error de conexión", style={'color': 'red'}),
+                    html.P(str(e))
+                ])
+        return None
+
+    # Callback para descargas
+    @app.callback(
+        Output('download-data', 'data'),
+        Input('download-csv-btn', 'n_clicks'),
+        Input('download-json-btn', 'n_clicks'),
+        Input('download-excel-btn', 'n_clicks'),
+        State('etl-data', 'data'),
+        prevent_initial_call=True
+    )
+    def handle_download(csv_clicks, json_clicks, excel_clicks, etl_data):
+        ctx = dash.callback_context
+        if not ctx.triggered or etl_data is None:
+            return no_update
+
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        df = pd.read_json(etl_data, orient='split')
+
+        try:
+            if button_id == 'download-csv-btn':
+                return dcc.send_data_frame(df.to_csv, "datos_procesados.csv", index=False)
+            
+            elif button_id == 'download-json-btn':
+                return dcc.send_data_frame(df.to_json, "datos_procesados.json", orient='records', indent=2)
+            
+            elif button_id == 'download-excel-btn':
+                return dcc.send_data_frame(df.to_excel, "datos_procesados.xlsx", index=False, engine='openpyxl')
+
+        except Exception as e:
+            print(f"Error en descarga: {str(e)}")
+            return no_update
+
+    # Callback para habilitar botones
+    @app.callback(
+        [Output('download-csv-btn', 'disabled'),
+         Output('download-json-btn', 'disabled'),
+         Output('download-excel-btn', 'disabled')],
+        Input('etl-data', 'data')
+    )
+    def toggle_buttons(etl_data):
+        return [etl_data is None] * 3
+    
+    @app.callback(
+        Output('output-data-upload', 'style'),
+        Output('output-db-connection', 'style'),
+        Input('last-data-source', 'data'),
+    )
+    def toggle_results_display(last_source):
+        file_style = {'display': 'block'} if last_source == 'file' else {'display': 'none'}
+        db_style = {'display': 'block'} if last_source == 'db' else {'display': 'none'}
+        return file_style, db_style
+    
+    @app.callback(
+        Output('last-data-source', 'data', allow_duplicate=True),
+        Input('upload-data', 'contents'),
+        prevent_initial_call=True
+    )
+    def set_last_source_file(_):
+        return 'file'
+
+    @app.callback(
+        Output('last-data-source', 'data', allow_duplicate=True),
+        Input('db-connect-btn', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def set_last_source_db(_):
+        return 'db'
