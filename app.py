@@ -1,45 +1,32 @@
-from dash import Dash, dcc, html, Input, Output, callback
+from dash import Dash, dcc, html
 import dash_bootstrap_components as dbc
+from callbacks import register_callbacks
 
-# Components
+# Importar componentes
 from components.carga import layout as carga_layout
 from components.etl import layout as etl_layout
-from components.mining import layout as mining_layout
-from components.decision import layout as decision_layout
+
 
 # App
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.title = "Sistema Hotelero"
 
-# Layout
+# Layout 
 app.layout = dbc.Container([
-    dcc.Store(id='stored-data'), # Store para guardar DataFrame procesado
-    html.H1("Sistema Hotelero - Análisis de Datos", className="mb-4"),
-    dcc.Tabs(id='tabs', value='carga', children=[
-        dcc.Tab(label='Carga de Datos', value='carga'),
-        dcc.Tab(label='ETL', value='etl'),
-        dcc.Tab(label='Minería de Datos', value='mining'),
-        dcc.Tab(label='Decisión', value='decision')
+    dbc.Row([
+        dbc.Col(dcc.Store(id='store-data')),
+        dbc.Col(dcc.Store(id='etl-data')),
+        dbc.Col(dbc.Alert("Sistema Hotelero - Almacenes de Datos", color="primary", className="text-center fw-bold fs-3"),width=12)
     ]),
-    html.Div(id='tabs-content'),
-], fluid=True, className="p-4", style={'backgroundColor': '#f8f9fa'})
+
+    dbc.Tabs([
+        dbc.Tab(carga_layout(), label='Carga de Datos'),
+        dbc.Tab(etl_layout(), label='ETL')
+    ])
+], fluid=True)
 
 # Callbacks
-@callback(
-    Output('tabs-content', 'children'),
-    Input('tabs', 'value')
-)
-def render_tab(tab_name):
-    if tab_name == 'carga':
-        return carga_layout
-    elif tab_name == 'etl':
-        return etl_layout
-    elif tab_name == 'mining':
-        return mining_layout
-    elif tab_name == 'decision':
-        return decision_layout
-    else:
-        return html.Div("Seleccione una pestaña válida.")
-    
+register_callbacks(app)
+
 if __name__ == '__main__':
-    app.run_server(debug=True)  
-# -*- coding: utf-8 -*-
+    app.run(debug=True)
