@@ -258,11 +258,12 @@ def register_callbacks(app):
     @app.callback(
         [Output('download-csv-btn', 'disabled'),
          Output('download-json-btn', 'disabled'),
+        Output("toggle-export-form", "disabled"),
          Output('download-excel-btn', 'disabled')],
         Input('etl-data', 'data')
     )
     def toggle_buttons(etl_data):
-        return [etl_data is None] * 3
+        return [etl_data is None] * 4
     
     @app.callback(
         Output('output-data-upload', 'style'),
@@ -289,3 +290,55 @@ def register_callbacks(app):
     )
     def set_last_source_db(_):
         return 'db'
+    
+    @app.callback(
+    Output("export-form-collapse", "is_open"),
+    Input("toggle-export-form", "n_clicks"),
+    State("export-form-collapse", "is_open"),
+    prevent_initial_call=True
+)
+    def toggle_export_form(n_clicks, is_open):
+        if n_clicks:
+            return not is_open
+        return is_open
+        
+    @app.callback(
+        Output("export-status", "children"),
+        Input("export-to-db-btn", "n_clicks"),
+        State("etl-data", "data"),
+        State("db-host", "value"),
+        State("db-port", "value"),
+        State("db-name", "value"),
+        State("db-user", "value"),
+        State("db-password", "value"),
+        State("db-table", "value"),
+        prevent_initial_call=True
+    )
+    def export_to_postgres(n_clicks, etl_data, host, port, dbname, user, password, table_name):
+        if not etl_data:
+            return "No hay datos procesados para exportar."
+
+        try:
+            df = pd.read_json(etl_data, orient="split")
+            db_manager = DatabaseManager()
+            
+            connected = db_manager.carga_connect(
+                host=host,
+                database=dbname,
+                user=user,
+                password=password,
+                port=port
+            )
+
+            if not connected:
+                return "Error al conectar a PostgreSQL. Revisa tus credenciales."
+
+            saved = db_manager.save_to_db(df, table_name)
+
+            if saved:
+                return "Exportación exitosa a PostgreSQL."
+            else:
+                return "Error al guardar datos en la base de datos."
+
+        except Exception as e:
+            return f"Error al exportar: {str(e)}"
