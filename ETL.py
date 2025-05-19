@@ -81,7 +81,13 @@ class CleanProcessor(DataProcessor):
             initial_count = len(df)
             critical_columns = ['country', 'adr', 'reservation_status_date']
             df.dropna(subset=critical_columns, how='any', inplace=True)
-            
+                        # Eliminar filas con valores nulos en 'agent'
+            if 'agent' in df.columns:
+                df.dropna(subset=['agent'], inplace=True)
+
+            # Eliminar columna 'company' si existe
+            if 'company' in df.columns:
+                df.drop(columns=['company'], inplace=True)
             # Consideraremos que un registro es duplicado si coincide en TODOS estos campos:
             duplicate_subset = [
                 'hotel',
