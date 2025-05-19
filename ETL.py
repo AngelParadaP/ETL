@@ -249,8 +249,6 @@ class SeasonalAnalysisProcessor(DataProcessor):
             quarter_stats.columns = ['quarter', 'total_reservations', 'cancellation_rate', 'avg_daily_rate']
             
             print("\nProcesamiento estacional y de temporada completado")
-            print("\nEstadísticas por trimestre:")
-            print(quarter_stats.to_string(index=False))
             
             return df.drop('arrival_quarter', axis=1)  # Eliminamos la columna temporal
         

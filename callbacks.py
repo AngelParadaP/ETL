@@ -1,8 +1,9 @@
 from dash import Input, Output, State, html, dash_table
 import pandas as pd
-from ETL import DateProcessor, CleanProcessor
+from ETL import DateProcessor, CleanProcessor, PredictiveFeaturesProcessor, SeasonalAnalysisProcessor
 import base64
 import io
+import plotly.express as px
 
 # Función para leer y mostrar el archivo
 def parse_contents(contents, filename):
@@ -70,7 +71,7 @@ def register_callbacks(app):
         df_etl = df.copy()
 
         # Aplicar los procesadores
-        processors = [DateProcessor(), CleanProcessor()]
+        processors = [DateProcessor(), CleanProcessor(), PredictiveFeaturesProcessor(), SeasonalAnalysisProcessor()]
         for processor in processors:
             df_etl = processor.process(df_etl)
 
@@ -89,3 +90,68 @@ def register_callbacks(app):
                 style_table={'overflowX': 'auto'}
             )
         ]), df_etl.to_json(date_format='iso', orient='split')
+        
+    @app.callback(
+        Output('eda-statistics-content', 'children'),
+        Output('eda-histogram-plot', 'figure'),
+        Output('eda-boxplot-plot', 'figure'),
+        Output('eda-time-series-plot', 'figure'),
+        Input('eda-stat-dropdown', 'value'),
+        Input('eda-hist-dropdown', 'value'),
+        Input('eda-boxplot-dropdown', 'value'),
+        Input('etl-data', 'data')
+    )
+    def update_eda(selected_stat, selected_hist, selected_box, stored_data):
+        if stored_data is None:
+            return "Carga los datos primero", {}, {}, {}
+            
+        json_data = io.StringIO(stored_data)
+            
+        df = pd.read_json(json_data, orient='split')
+        
+        # 1. Estadísticas Descriptivas
+        stats = df[selected_stat].describe()
+        stats_content = [
+            html.P(f"Variable: {selected_stat}"),
+            html.P(f"Media: {stats['mean']:.2f}"),
+            html.P(f"Mediana: {stats['50%']:.2f}"),
+            html.P(f"Desv. Estándar: {stats['std']:.2f}"),
+            html.P(f"Mínimo: {stats['min']:.2f}"),
+            html.P(f"Máximo: {stats['max']:.2f}"),
+            html.P(f"Datos: {int(stats['count'])} registros")
+        ]
+        
+        # 2. Generar Histograma
+        hist_fig = px.histogram(
+            df, 
+            x=selected_hist,
+            nbins=50,
+            title=f'Distribución de {selected_hist}'
+        )
+        
+        # 3. Generar Boxplot
+        box_fig = px.box(
+            df,
+            y=selected_box,
+            title=f'Distribución de {selected_box}'
+        )
+        
+        # 4. Serie Temporal
+        time_series = df.groupby('arrival_date').size().reset_index(name='reservas')
+        time_fig = px.line(
+            time_series,
+            x='arrival_date',
+            y='reservas',
+            title='Evolución Temporal de Reservas'
+        )
+        
+        return stats_content, hist_fig, box_fig, time_fig
+
+    # Sincronización de Dropdowns
+    @app.callback(
+        Output('eda-hist-dropdown', 'value'),
+        Output('eda-boxplot-dropdown', 'value'),
+        Input('eda-stat-dropdown', 'value')
+    )
+    def sync_dropdowns(selected_stat):
+        return selected_stat, selected_stat

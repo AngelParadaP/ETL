@@ -5,7 +5,7 @@ from callbacks import register_callbacks
 # Importar componentes
 from components.carga import layout as carga_layout
 from components.etl import layout as etl_layout
-
+from components.analisis_exp import layout as analisis_exp_layout
 
 # App
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -21,7 +21,9 @@ app.layout = dbc.Container([
 
     dbc.Tabs([
         dbc.Tab(carga_layout(), label='Carga de Datos'),
-        dbc.Tab(etl_layout(), label='ETL')
+        dbc.Tab(etl_layout(), label='ETL'),
+        dbc.Tab(analisis_exp_layout(), label='Análisis Exploratorio')
+        
     ])
 ], fluid=True)
 
