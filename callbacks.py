@@ -306,12 +306,12 @@ def register_callbacks(app):
         Output("export-status", "children"),
         Input("export-to-db-btn", "n_clicks"),
         State("etl-data", "data"),
-        State("db-host", "value"),
-        State("db-port", "value"),
-        State("db-name", "value"),
-        State("db-user", "value"),
-        State("db-password", "value"),
-        State("db-table", "value"),
+        State("db-hosteo", "value"),
+        State("db-puerto", "value"),
+        State("db-nombre", "value"),
+        State("db-usuario", "value"),
+        State("db-contra", "value"),
+        State("db-tabla", "value"),
         prevent_initial_call=True
     )
     def export_to_postgres(n_clicks, etl_data, host, port, dbname, user, password, table_name):

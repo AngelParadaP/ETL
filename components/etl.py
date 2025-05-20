@@ -26,14 +26,14 @@ def layout():
             children=dbc.Card([
                 dbc.CardBody([
                     dbc.Row([
-                        dbc.Col(dbc.Input(id="db-host", placeholder="Host", type="text"), width=4),
-                        dbc.Col(dbc.Input(id="db-port", placeholder="Puerto", type="number"), width=2),
-                        dbc.Col(dbc.Input(id="db-name", placeholder="Nombre de la base de datos", type="text"), width=4),
+                        dbc.Col(dbc.Input(id="db-hosteo", placeholder="Host", type="text"), width=4),
+                        dbc.Col(dbc.Input(id="db-puerto", placeholder="Puerto", type="number"), width=2),
+                        dbc.Col(dbc.Input(id="db-nombre", placeholder="Nombre de la base de datos", type="text"), width=4),
                     ], class_name="mb-2"),
                     dbc.Row([
-                        dbc.Col(dbc.Input(id="db-user", placeholder="Usuario", type="text"), width=4),
-                        dbc.Col(dbc.Input(id="db-password", placeholder="Contraseña", type="password"), width=4),
-                        dbc.Col(dbc.Input(id="db-table", placeholder="Nombre de la tabla", type="text"), width=4),
+                        dbc.Col(dbc.Input(id="db-usuario", placeholder="Usuario", type="text"), width=4),
+                        dbc.Col(dbc.Input(id="db-contra", placeholder="Contraseña", type="password"), width=4),
+                        dbc.Col(dbc.Input(id="db-tabla", placeholder="Nombre de la tabla", type="text"), width=4),
                     ], class_name="mb-2"),
                     dbc.Button("Exportar a PostgreSQL", id="export-to-db-btn", color="warning", class_name="mt-2")
                 ])
