@@ -64,6 +64,7 @@ def layout():
                 ])
             ]),
             
+
             # Tab 2: Predicción de Cancelaciones
             dcc.Tab(label="Predicción de Cancelaciones", children=[
                 html.Div([

@@ -16,6 +16,7 @@ import plotly.figure_factory as ff
 import numpy as np
 import json
 import dash_bootstrap_components as dbc
+from dash import ALL
 
 # Función para leer y mostrar el archivo
 def parse_contents(contents, filename):
@@ -480,7 +481,57 @@ def register_callbacks(app):
                 dash.no_update
             )
 
-        
+    def generar_interfaz_prediccion(features, df):
+        prediction_inputs = []
+
+        for feature in features:
+            input_id = {'type': 'pred-input', 'index': feature}
+
+            if df[feature].dtype == 'object' or feature in ['hotel', 'deposit_type']:
+                if feature in ['hotel', 'deposit_type']:
+                    opciones = {
+                        'hotel': ['Resort Hotel', 'City Hotel'],
+                        'deposit_type': ['No Deposit', 'Refundable', 'Non Refund']
+                    }[feature]
+                else:
+                    opciones = df[feature].dropna().unique()
+
+                prediction_inputs.append(
+                    dbc.Row([
+                        dbc.Col(dbc.Label(feature), width=4),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id=input_id,
+                                options=[{'label': opt, 'value': opt} for opt in opciones],
+                                placeholder=f"Selecciona {feature}"
+                            ),
+                            width=8
+                        )
+                    ], className="mb-2")
+                )
+            else:
+                prediction_inputs.append(
+                    dbc.Row([
+                        dbc.Col(dbc.Label(feature), width=4),
+                        dbc.Col(
+                            dbc.Input(
+                                id=input_id,
+                                type='number',
+                                placeholder=f"Ingresar {feature}"
+                            ),
+                            width=8
+                        )
+                    ], className="mb-2")
+                )
+
+        return html.Div([
+            html.H5("Simular Nueva Reserva"),
+            html.Div(prediction_inputs),
+            dbc.Button("Predecir Probabilidad de Cancelación", id="predict-btn", color="primary", className="mt-3"),
+            html.Div(id='prediction-result')
+        ])
+
+
     # Callback para el modelo de predicción de cancelaciones
     @app.callback(
         [Output('model-performance', 'children'),
@@ -492,7 +543,8 @@ def register_callbacks(app):
         [Input('train-model', 'n_clicks')],
         [State('prediction-features', 'value'),
          State('model-type', 'value'),
-         State('etl-data', 'data')]
+         State('etl-data', 'data')],
+         prevent_initial_call=True
     )
     def train_cancelation_model(n_clicks, features, model_type, etl_data):
         if n_clicks is None or not features:
@@ -557,30 +609,7 @@ def register_callbacks(app):
             rules = html.P("Este modelo no genera reglas explícitas. Ver importancia de características arriba.")
         
         # Interfaz de predicción
-        prediction_inputs = []
-        for feature in features:
-            if df[feature].dtype == 'object':
-                options = [{'label': val, 'value': val} for val in df[feature].unique()]
-                prediction_inputs.append(
-                    dbc.Row([
-                        dbc.Col(dbc.Label(feature), width=4),
-                        dbc.Col(dcc.Dropdown(id=f'pred-{feature}', options=options), width=8)
-                    ], className="mb-2")
-                )
-            else:
-                prediction_inputs.append(
-                    dbc.Row([
-                        dbc.Col(dbc.Label(feature), width=4),
-                        dbc.Col(dbc.Input(id=f'pred-{feature}', type='number'), width=8)
-                    ], className="mb-2")
-                )
-        
-        prediction_interface = html.Div([
-            html.H5("Simular Nueva Reserva"),
-            html.Div(prediction_inputs),
-            dbc.Button("Predecir Probabilidad de Cancelación", id="predict-btn", color="primary", className="mt-3"),
-            html.Div(id='prediction-result')
-        ])
+        prediction_interface = generar_interfaz_prediccion(features, df)
         
         # Guardar modelo serializado
         model_data = {
@@ -603,35 +632,182 @@ def register_callbacks(app):
         
         return metrics, imp_fig, cm_fig, rules, prediction_interface, model_data
     
+    # #Callback para variables dinámicas de predicción
+    # @app.callback(
+    # Output('prediction-interface', 'children'),
+    # Input('prediction-features', 'value'),
+    # allow_duplicate=True
+    # )
+    # def render_prediction_inputs(selected_features):
+    #     if not selected_features:
+    #         return html.P("Selecciona al menos una variable para predecir.")
+
+    #     inputs = []
+
+    #     for feature in selected_features:
+    #         input_id = {'type': 'pred-input', 'index': feature}
+
+    #         if feature in ['hotel', 'deposit_type']:
+    #             options = {
+    #                 'hotel': ['Resort Hotel', 'City Hotel'],
+    #                 'deposit_type': ['No Deposit', 'Refundable', 'Non Refund']
+    #             }[feature]
+    #             inputs.append(
+    #                 dbc.Col([
+    #                     html.Label(feature.replace("_", " ").title()),
+    #                     dcc.Dropdown(
+    #                         id=input_id,
+    #                         options=[{'label': opt, 'value': opt} for opt in options],
+    #                         placeholder=f"Selecciona {feature}"
+    #                     )
+    #                 ])
+    #             )
+    #         else:
+    #             inputs.append(
+    #                 dbc.Col([
+    #                     html.Label(feature.replace("_", " ").title()),
+    #                     dcc.Input(
+    #                         id=input_id,
+    #                         type="number",
+    #                         placeholder=f"Ingresar {feature}",
+    #                         style={"width": "100%"}
+    #                     )
+    #                 ])
+    #             )
+
+    #     return html.Div([
+    #         dbc.Row(inputs, className="mb-3"),
+    #         dbc.Button("Predecir Cancelación", id="predict-btn", color="warning"),
+    #         html.Div(id="prediction-result", className="mt-3")
+    #     ])
+    
     # Callback para predicción en tiempo real
     @app.callback(
         Output('prediction-result', 'children'),
-        [Input('predict-btn', 'n_clicks')],
-        [State('mining-models', 'data'),
-         State('etl-data', 'data')] +
-        [State(f'pred-{feat}', 'value') for feat in ['lead_time', 'hotel', 'deposit_type', 'adr']]
+        Input('predict-btn', 'n_clicks'),
+        State('mining-models', 'data'),
+        State('etl-data', 'data'),
+        State('prediction-features', 'value'),
+        State({'type': 'pred-input', 'index': ALL}, 'value'),
+        prevent_initial_call=True
     )
-    def predict_cancelation(n_clicks, model_data, etl_data, *input_values):
+    def predict_cancelation(n_clicks, model_data, etl_data, features, input_values):
         if n_clicks is None:
             return dash.no_update
-            
-        # Reconstruir el modelo (simplificado - en producción usaría pickle/joblib)
-        features = model_data['features']
+
+        if not model_data or not input_values:
+            return dbc.Alert("Faltan datos del modelo o entradas de usuario.", color="danger")
 
         if len(input_values) != len(features):
-            return dbc.Alert(f"Se esperaban {len(features)} valores, pero se recibieron {len(input_values)}.", color="danger")
-        input_df = pd.DataFrame([input_values], columns=features)
+            return dbc.Alert(
+                f"Se esperaban {len(features)} valores, pero se recibieron {len(input_values)}.",
+                color="danger"
+            )
+
+        try:
+            # Convertir los datos ingresados en un DataFrame
+            user_input = pd.DataFrame([input_values], columns=features)
+
+            # Restaurar datos de entrenamiento para asegurar mismo preprocesamiento
+            df = pd.read_json(etl_data, orient='split')
+            X_train = pd.get_dummies(df[features])
+            
+            # Aplicar mismo one-hot encoding
+            user_input_dummies = pd.get_dummies(user_input)
+            user_input_dummies = user_input_dummies.reindex(columns=X_train.columns, fill_value=0)
+
+            # Restaurar el modelo (tipo y parámetros)
+            model_type = model_data['model_type']
+            model_params = json.loads(model_data['model_params'])
+
+            if model_type == 'decision_tree':
+                model = DecisionTreeClassifier(**model_params)
+            elif model_type == 'random_forest':
+                model = RandomForestClassifier(**model_params)
+            else:
+                model = LogisticRegression(**model_params)
+
+            # Reentrenar modelo (porque no estás usando joblib/pickle aún)
+            y_train = df['is_canceled']
+            model.fit(X_train, y_train)
+
+            # Realizar predicción
+            prob_cancel = model.predict_proba(user_input_dummies)[0][1]
+
+            return html.Div([
+                html.H5("Resultado de la Predicción"),
+                dbc.Alert(
+                    f"Probabilidad de cancelación: {prob_cancel:.1%}",
+                    color="danger" if prob_cancel > 0.5 else "success"
+                ),
+                html.P("Valores ingresados:"),
+                html.Pre(str(user_input.to_dict('records')))
+            ])
         
-        # Esta es una simulación - en la implementación real necesitarías serializar/deserializar el modelo
-        prob_cancel = np.random.uniform(0, 1)  # Solo para demostración
+        except Exception as e:
+            return dbc.Alert(f"Error al predecir: {str(e)}", color="danger")
+
+
+    # @app.callback(
+    # Output('prediction-result', 'children'),
+    # Input('predict-btn', 'n_clicks'),
+    # State('mining-models', 'data'),
+    # State('etl-data', 'data'),
+    # State('prediction-features', 'value'),
+    # State({'type': 'pred-input', 'index': ALL}, 'value'),
+    # allow_duplicate=True
+    # )
+    # def predict_cancelation(n_clicks, model_data, etl_data, features, input_values):
+    #     if n_clicks is None:
+    #         return dash.no_update
+
+    #     if len(input_values) != len(features):
+    #         return dbc.Alert(
+    #             f"Se esperaban {len(features)} valores, pero se recibieron {len(input_values)}.",
+    #             color="danger"
+    #         )
+
+    #     input_df = pd.DataFrame([input_values], columns=features)
+    #     prob_cancel = np.random.uniform(0, 1)
+
+    #     return html.Div([
+    #         html.H5("Resultado de la Predicción"),
+    #         dbc.Alert(
+    #             f"Probabilidad de cancelación: {prob_cancel:.1%}",
+    #             color="danger" if prob_cancel > 0.5 else "success"
+    #         ),
+    #         html.P("Valores ingresados:"),
+    #         html.Pre(str(input_df.to_dict('records')))
+    #     ])
+
+    # @app.callback(
+    #     Output('prediction-result', 'children'),
+    #     [Input('predict-btn', 'n_clicks')],
+    #     [State('mining-models', 'data'),
+    #      State('etl-data', 'data')] +
+    #     [State(f'pred-{feat}', 'value') for feat in ['lead_time', 'hotel', 'deposit_type', 'adr']]
+    # )
+    # def predict_cancelation(n_clicks, model_data, etl_data, *input_values):
+    #     if n_clicks is None:
+    #         return dash.no_update
+            
+    #     # Reconstruir el modelo (simplificado - en producción usaría pickle/joblib)
+    #     features = model_data['features']
+
+    #     if len(input_values) != len(features):
+    #         return dbc.Alert(f"Se esperaban {len(features)} valores, pero se recibieron {len(input_values)}.", color="danger")
+    #     input_df = pd.DataFrame([input_values], columns=features)
         
-        return html.Div([
-            html.H5("Resultado de la Predicción"),
-            dbc.Alert(f"Probabilidad de cancelación: {prob_cancel:.1%}", 
-                     color="danger" if prob_cancel > 0.5 else "success"),
-            html.P("Valores ingresados:"),
-            html.P(str(input_df.to_dict('records')))
-        ])
+    #     # Esta es una simulación - en la implementación real necesitarías serializar/deserializar el modelo
+    #     prob_cancel = np.random.uniform(0, 1)  # Solo para demostración
+        
+    #     return html.Div([
+    #         html.H5("Resultado de la Predicción"),
+    #         dbc.Alert(f"Probabilidad de cancelación: {prob_cancel:.1%}", 
+    #                  color="danger" if prob_cancel > 0.5 else "success"),
+    #         html.P("Valores ingresados:"),
+    #         html.P(str(input_df.to_dict('records')))
+    #     ])
     
     # Callback para el análisis de ingresos
     @app.callback(
