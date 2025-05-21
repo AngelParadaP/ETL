@@ -23,8 +23,8 @@ app.layout = dbc.Container([
     dbc.Tabs([
         dbc.Tab(carga_layout(), label='Carga de Datos'),
         dbc.Tab(etl_layout(), label='ETL'),
+        dbc.Tab(mining_layout(), label='Minería de Datos'),
         dbc.Tab(analisis_exp_layout(), label='Análisis Exploratorio'),
-        dbc.Tab(mining_layout(), label='Minería de Datos')
         
     ])
 ], fluid=True)

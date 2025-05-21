@@ -617,6 +617,9 @@ def register_callbacks(app):
             
         # Reconstruir el modelo (simplificado - en producción usaría pickle/joblib)
         features = model_data['features']
+
+        if len(input_values) != len(features):
+            return dbc.Alert(f"Se esperaban {len(features)} valores, pero se recibieron {len(input_values)}.", color="danger")
         input_df = pd.DataFrame([input_values], columns=features)
         
         # Esta es una simulación - en la implementación real necesitarías serializar/deserializar el modelo
