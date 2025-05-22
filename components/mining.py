@@ -4,8 +4,8 @@ import dash_bootstrap_components as dbc
 def layout():
     return dbc.Container([
         dcc.Store(id='mining-models'),  # Para almacenar modelos entrenados
-        html.H2("Análisis de Minería de Datos", className="mb-4"),
-        
+        html.H4("Análisis de Minería de Datos", className="my-4"),
+
         # Tabs para las diferentes técnicas
         dcc.Tabs([
             # Tab 1: Segmentación de Clientes
@@ -174,5 +174,8 @@ def layout():
                     )
                 ])
             ])
-        ])
+        ]),
+                
+        html.Div(className="my-4"),
+        html.Div(className="my-4"),
     ], fluid=True)
