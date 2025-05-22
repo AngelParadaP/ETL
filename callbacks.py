@@ -73,39 +73,190 @@ def register_callbacks(app):
     
     # Callback para aplicar el proceso ETL
     @app.callback(
-        Output('etl-output', 'children'),
-        Output('etl-data', 'data'),
-        Input('apply-etl-btn', 'n_clicks'),
-        State('store-data', 'data'),
-        prevent_initial_call=True
-    )
+    Output('etl-output', 'children'),
+    Output('etl-data', 'data'),
+    Input('apply-etl-btn', 'n_clicks'),
+    State('store-data', 'data'),
+    prevent_initial_call=True
+)
     def aplicar_etl(n_clicks, json_data):
         if not json_data:
             return html.Div(["No hay datos cargados."]), None
 
-        df = pd.read_json(json_data, orient='split')
-        df_etl = df.copy()
+        df_original = pd.read_json(json_data, orient='split')
+        df_etl = df_original.copy()
 
-        # Aplicar los procesadores
-        processors = [DateProcessor(), CleanProcessor(), PredictiveFeaturesProcessor(), SeasonalAnalysisProcessor()]
-        for processor in processors:
-            df_etl = processor.process(df_etl)
+        filas_iniciales = len(df_etl)
+        columnas_iniciales = set(df_etl.columns)
 
-        # Visualizar antes y después del ETL
-        return html.Div([
-            html.H4("Antes del ETL"),
-            dash_table.DataTable(
-                data=df.head(5).to_dict('records'),
-                columns=[{'name': i, 'id': i} for i in df.columns],
-                style_table={'overflowX': 'auto'}
-            ),
-            html.H4("Después del ETL"),
-            dash_table.DataTable(
-                data=df_etl.head(5).to_dict('records'),
+        secciones = []
+
+        # === Paso 1: Fechas ===
+        try:
+            df_antes = df_etl.copy()
+
+            # Detectar nulos antes del procesamiento
+            nulos_fecha_antes = df_antes['reservation_status_date'].isna().sum() if 'reservation_status_date' in df_antes.columns else 0
+
+            df_etl = DateProcessor().process(df_etl)
+
+            # Nuevas fechas no nulas
+            nulos_fecha_despues = df_etl['reservation_status_date'].isna().sum() if 'reservation_status_date' in df_etl.columns else 0
+            fechas_modificadas = nulos_fecha_antes - nulos_fecha_despues
+
+            resumen = f"""
+    Conversión de Fechas:
+    - {fechas_modificadas} fechas fueron corregidas en 'reservation_status_date'.
+    - Columna 'total_stay' creada correctamente.
+    """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
                 columns=[{'name': i, 'id': i} for i in df_etl.columns],
-                style_table={'overflowX': 'auto'}
-            )
-        ]), df_etl.to_json(date_format='iso', orient='split')
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en DateProcessor: {e}", color="danger"))
+
+        # === Paso 2: Limpieza ===
+        try:
+            df_antes = df_etl.copy()
+
+            filas_antes = len(df_antes)
+            nulos_antes = df_antes.isna().sum().sum()
+
+            df_etl = CleanProcessor().process(df_etl)
+
+            filas_despues = len(df_etl)
+            nulos_despues = df_etl.isna().sum().sum()
+
+            filas_eliminadas = filas_antes - filas_despues
+            resumen = f"""
+    Limpieza de Datos:
+    - Se eliminaron {filas_eliminadas} filas (nulos o duplicados).
+    - Nulos antes: {int(nulos_antes)} | Nulos después: {int(nulos_despues)}.
+    """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_etl.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en CleanProcessor: {e}", color="danger"))
+
+        # === Paso 3: Variables predictivas ===
+        try:
+            df_antes = df_etl.copy()
+            columnas_antes = set(df_antes.columns)
+
+            df_etl = PredictiveFeaturesProcessor().process(df_etl)
+            columnas_despues = set(df_etl.columns)
+
+            nuevas_columnas = columnas_despues - columnas_antes
+
+            resumen = f"""
+    Agregado de Características:
+    - Se agregaron {len(nuevas_columnas)} nuevas columnas al DataFrame.
+    """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_etl.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en PredictiveFeaturesProcessor: {e}", color="danger"))
+
+        # === Paso 4: Análisis Estacional ===
+        try:
+            df_antes = df_etl.copy()
+            columnas_antes = set(df_antes.columns)
+
+            df_etl = SeasonalAnalysisProcessor().process(df_etl)
+            columnas_despues = set(df_etl.columns)
+
+            nuevas_columnas = columnas_despues - columnas_antes
+
+            resumen = f"""
+    Análisis Estacional:
+    - Columnas añadidas: {', '.join(nuevas_columnas) if nuevas_columnas else 'ninguna'}.
+    """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_etl.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en SeasonalAnalysisProcessor: {e}", color="danger"))
+
+        # === Resumen final ===
+        filas_finales = len(df_etl)
+        columnas_finales = len(df_etl.columns)
+        resumen_final = f"""
+    ✅ Resumen Final del ETL:
+    - Filas al inicio: {filas_iniciales}
+    - Filas después del ETL: {filas_finales}
+    - Columnas al inicio: {len(columnas_iniciales)}
+    - Columnas al final: {columnas_finales}
+    """
+        secciones.append(dbc.Alert(html.Pre(resumen_final.strip()), color="success"))
+
+        return html.Div(secciones), df_etl.to_json(date_format='iso', orient='split')
+    
         
     # Callback para el análisis exploratorio de datos (EDA)
     @app.callback(
