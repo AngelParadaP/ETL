@@ -4,7 +4,7 @@ import dash_bootstrap_components as dbc
 def layout():
     return dbc.Container([
         dbc.Row([
-            dbc.Col(html.H5("Análisis Exploratorio de Datos"), width=12, className="mb-4")
+            dbc.Col(html.H5("Análisis Exploratorio de Datos"), width=12, className="my-4")
         ]),
         
         # Sección de Estadísticas y Gráficos

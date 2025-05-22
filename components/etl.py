@@ -6,7 +6,7 @@ def layout():
         dcc.Download(id="download-data"),
         dcc.Store(id='etl-data'),
         dbc.Row([
-            dbc.Col(html.H5("Haz clic para aplicar el proceso ETL"), width=12),
+            dbc.Col(html.H5("Haz clic para aplicar el proceso ETL",  className="my-4"), width=12),
             dbc.Col(dbc.Button("Aplicar ETL", id="apply-etl-btn", color="success", class_name="mb-3"), width="auto")
         ]),
         dbc.Row([
