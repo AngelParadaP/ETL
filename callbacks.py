@@ -1129,7 +1129,8 @@ def register_callbacks(app):
 
                 dbc.Col([
                     html.H5("📊 Visualización de Apoyo"),
-                    dcc.Graph(figure=fig)
+                    dcc.Graph(figure=fig),
+                    html.P("La gráfica muestra cómo varía la tarifa promedio diaria (ADR) según el tiempo de anticipación de la reserva (Lead Time), diferenciando por segmento de mercado. Se observa mayor dispersión de precios en reservas de último minuto, lo cual sugiere oportunidades para estrategias de precios dinámicos. También se aprecia que algunos segmentos como 'Direct' o 'Online TA' tienden a pagar más, mientras que el segmento 'Groups' paga menos."),
                 ], width=6)
             ]),
 
@@ -1160,7 +1161,7 @@ def register_callbacks(app):
                 dbc.Col([
                     html.H5("🔍 Hallazgos del Análisis Exploratorio de Datos (EDA)", className="mt-4"),
                     html.Ul([
-                        html.Li("📉 La mayoría de los clientes reservan con menos de 60 días de anticipación."),
+                        html.Li("📉 Más del 50% de los clientes reservan con menos de 60 días de anticipación, y el mayor volumen de reservas (más de 18,000) ocurre en los primeros 20 días."),
                         html.Li("💰 La tarifa diaria (ADR) presenta outliers importantes por encima de $5000."),
                         html.Li("🛏️ La mayoría de las estancias duran entre 1 y 5 noches."),
                         html.Li("📅 Se observan picos de reservas en verano, especialmente en julio y agosto."),
