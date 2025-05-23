@@ -12,6 +12,7 @@ from sklearn.tree import DecisionTreeClassifier, export_text
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from imblearn.over_sampling import SMOTE
 import plotly.figure_factory as ff
 import numpy as np
 import json
@@ -381,7 +382,7 @@ def register_callbacks(app):
     )
     def aplicar_filtro_etl(n_clicks, json_data, pais, adr_min):
         if not json_data:
-            return html.Div("⚠️ No hay datos transformados para filtrar.")
+            return html.Div("No hay datos transformados para filtrar.")
 
         df = pd.read_json(json_data, orient='split')
 
@@ -845,7 +846,7 @@ def register_callbacks(app):
          State('etl-data', 'data')],
          prevent_initial_call=True
     )
-    def train_cancelation_model(n_clicks, features, model_type, etl_data):
+    def train_exigente_model(n_clicks, features, model_type, etl_data):
         if n_clicks is None or not features:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
             
@@ -853,7 +854,14 @@ def register_callbacks(app):
         
         # Preprocesamiento
         X = pd.get_dummies(df[features])
-        y = df['many_requests']  # Variable objetivo
+        y = df['many_requests']
+
+        # Solo aplicar SMOTE si es Árbol de Decisión y Regresión lógistica
+        if model_type in ['decision_tree', 'logistic']:
+            sm = SMOTE(random_state=42)
+            X_res, y_res = sm.fit_resample(X, y)
+        else:
+            X_res, y_res = X, y
         
         # Entrenar modelo
         if model_type == 'decision_tree':
@@ -863,7 +871,7 @@ def register_callbacks(app):
         else:  # logistic
             model = LogisticRegression(max_iter=1000, random_state=42)
         
-        model.fit(X, y)
+        model.fit(X_res, y_res)
         
         # Evaluar modelo
         y_pred = model.predict(X)
@@ -1064,3 +1072,115 @@ def register_callbacks(app):
         ])
         
         return reg_fig, heat_fig, insights, recommendations
+    
+    
+    #================= CALLBACK DESICIONES =================
+    @app.callback(
+        Output('decision-content', 'children'),
+        Input('etl-data', 'data')
+    )
+    def render_decision_content(etl_json):
+        if not etl_json:
+            return dbc.Alert("No hay datos disponibles.", color="warning")
+
+        df = pd.read_json(io.StringIO(etl_json), orient='split')
+
+        if 'cluster' in df.columns:
+            fig = px.scatter(
+                df,
+                x='lead_time',
+                y='adr',
+                color='cluster',
+                title='Clusters de Clientes (Lead Time vs ADR)',
+                labels={'lead_time': 'Días de Anticipación', 'adr': 'Tarifa Diaria Promedio'}
+            )
+        else:
+            fig = px.scatter(
+                df,
+                x='lead_time',
+                y='adr',
+                color='market_segment' if 'market_segment' in df.columns else None,
+                title='Relación entre Anticipación y Precio',
+                labels={'lead_time': 'Lead Time', 'adr': 'ADR'}
+            )
+
+        return dbc.Container([
+            html.H4("Toma de Decisiones", className="my-4"),
+
+            dbc.Row([
+                dbc.Col([
+                    html.H5("🎯 Objetivo del análisis"),
+                    html.P("Identificar perfiles de clientes más rentables y predecir comportamientos clave, como las solicitudes especiales, para tomar decisiones estratégicas sobre precios, promociones y operación del hotel.")
+                ])
+            ]),
+
+            html.Hr(),
+
+            dbc.Row([
+                dbc.Col([
+                    html.H5("📌 Hallazgos Relevantes"),
+                    html.Ul([
+                        html.Li("🧩 El Cluster 2 representa solo el 22.9% de los clientes, pero genera los mayores ingresos con un ADR promedio de $181.10."),
+                        html.Li("🕒 El Cluster 1 reserva con 193 días de anticipación, pero tiene una tasa alta de cancelación (39.9%)."),
+                        html.Li("📉 El Cluster 0 es el más grande (51.8%), pero con tarifas bajas y corta estancia."),
+                    ])
+                ], width=6),
+
+                dbc.Col([
+                    html.H5("📊 Visualización de Apoyo"),
+                    dcc.Graph(figure=fig)
+                ], width=6)
+            ]),
+
+            dbc.Row([
+                dbc.Col([
+                    html.H5("🧠 Segmentación de Clientes (Clustering)", className="mt-4"),
+                    html.Ul([
+                        html.Li("📈 Cluster 2: ADR promedio de $181.10 — más rentable (22.9% de clientes)"),
+                        html.Li("⏳ Cluster 1: Anticipación promedio de 193 días — alto riesgo de cancelación (39.9%)"),
+                        html.Li("📉 Cluster 0: Clientes frecuentes pero con tarifas bajas — base operativa del negocio"),
+                    ])
+                ])
+            ]),
+
+            dbc.Row([
+                dbc.Col([
+                    html.H5("💸 Análisis de Precios e Ingresos", className="mt-4"),
+                    html.Ul([
+                        html.Li("🌞 Temporada alta: Agosto — ADR promedio de $154.87"),
+                        html.Li("❄️ Temporada baja: Enero — ADR promedio de $76.24"),
+                        html.Li("🏨 Habitación más cara: Tipo H — $193.78 por noche"),
+                        html.Li("🔁 Clientes recurrentes pagan $31.39 menos en promedio")
+                    ])
+                ])
+            ]),
+
+            dbc.Row([
+                dbc.Col([
+                    html.H5("🔍 Hallazgos del Análisis Exploratorio de Datos (EDA)", className="mt-4"),
+                    html.Ul([
+                        html.Li("📉 La mayoría de los clientes reservan con menos de 60 días de anticipación."),
+                        html.Li("💰 La tarifa diaria (ADR) presenta outliers importantes por encima de $5000."),
+                        html.Li("🛏️ La mayoría de las estancias duran entre 1 y 5 noches."),
+                        html.Li("📅 Se observan picos de reservas en verano, especialmente en julio y agosto."),
+                    ])
+                ])
+            ]),
+
+            dbc.Row([
+                dbc.Col([
+                    html.H5("✅ Recomendaciones Estratégicas", className="mt-4"),
+                    html.Ul([
+                        html.Li("🎯 Dirigir promociones premium al Cluster 2 para maximizar ingresos."),
+                        html.Li("🔒 Aplicar políticas de cancelación estrictas a clientes con alta anticipación (Cluster 1)."),
+                        html.Li("📦 Hacer upselling al Cluster 0 con paquetes que aumenten su valor."),
+                        html.Li("📊 Aumentar precios en agosto para reservas de último minuto (alta demanda)."),
+                        html.Li("🎁 Ofrecer noches extra con descuento en enero para mejorar ocupación."),
+                        html.Li("🏅 Crear programa de fidelidad con beneficios exclusivos para clientes recurrentes."),
+                        html.Li("🛎️ Anticipar servicios adicionales para clientes exigentes y ajustar operaciones con base en la predicción."),
+                        html.Li("🔍 Validar y controlar outliers en ADR para evitar distorsiones en decisiones de pricing."),
+                        html.Li("📆 Programar recursos operativos en función de la estacionalidad observada."),
+                    ])
+                ])
+            ])
+        ])

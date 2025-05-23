@@ -7,16 +7,17 @@ from components.carga import layout as carga_layout
 from components.etl import layout as etl_layout
 from components.analisis_exp import layout as analisis_exp_layout
 from components.mining import layout as mining_layout
+from components.decision import layout as decision_layout
 
 # App
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Sistema Hotelero"
 
 # Layout 
 app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(dcc.Store(id='store-data')),
-        dbc.Col(dcc.Store(id='etl-data-store')),
+        dbc.Col(dcc.Store(id='etl-data')),
         dbc.Col(dbc.Alert("Sistema Hotelero - Almacenes de Datos", color="primary", className="text-center fw-bold fs-3"),width=12)
     ]),
 
@@ -25,7 +26,7 @@ app.layout = dbc.Container([
         dbc.Tab(etl_layout(), label='ETL'),
         dbc.Tab(mining_layout(), label='Minería de Datos'),
         dbc.Tab(analisis_exp_layout(), label='Análisis Exploratorio'),
-        
+        dbc.Tab(decision_layout(), label='Toma de Decisiones')
     ])
 ], fluid=True)
 
