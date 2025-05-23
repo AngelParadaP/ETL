@@ -17,6 +17,7 @@ import numpy as np
 import json
 import dash_bootstrap_components as dbc
 from dash import ALL
+from utils import generar_tabla
 
 # Función para leer y mostrar el archivo
 def parse_contents(contents, filename):
@@ -30,7 +31,7 @@ def parse_contents(contents, filename):
         elif filename.endswith('.json'):
             df = pd.read_json(io.StringIO(decoded.decode('utf-8')))
         elif filename.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(io.BytesIO(decoded))
+            df = pd.read_excel(io.BytesIO(decoded), dtype=str)
         else:
             raise ValueError("Formato no soportado")
     except Exception as e:
@@ -42,13 +43,7 @@ def parse_contents(contents, filename):
     preview = html.Div([
         html.H5(f"Archivo cargado: {filename}"),
         html.P(f"Filas: {df.shape[0]}, Columnas: {df.shape[1]}"),
-        dash_table.DataTable(
-            data=df.head(10).to_dict('records'),
-            columns=[{"name": i, "id": i} for i in df.columns],
-            style_table={"overflowX": "auto"},
-            style_cell={"textAlign": "left", "minWidth": "100px"},
-            page_size=10,
-        )
+        generar_tabla(df, alto='600px')
     ])
     return df, preview
 
@@ -95,19 +90,18 @@ def register_callbacks(app):
         try:
             df_antes = df_etl.copy()
 
-            # Detectar nulos antes del procesamiento
-            nulos_fecha_antes = df_antes['reservation_status_date'].isna().sum() if 'reservation_status_date' in df_antes.columns else 0
+            # Guardar columna original antes del cambio 
+            fecha_col_antes = df_antes['reservation_status_date'].copy() if 'reservation_status_date' in df_antes.columns else None
 
             df_etl = DateProcessor().process(df_etl)
 
-            # Nuevas fechas no nulas
-            nulos_fecha_despues = df_etl['reservation_status_date'].isna().sum() if 'reservation_status_date' in df_etl.columns else 0
-            fechas_modificadas = nulos_fecha_antes - nulos_fecha_despues
+            # Contar cuántas fechas válidas hay ahora (después de to_datetime)
+            fechas_convertidas = df_etl['reservation_status_date'].notna().sum() if 'reservation_status_date' in df_etl.columns else 0
 
             resumen = f"""
     Conversión de Fechas:
-    - {fechas_modificadas} fechas fueron corregidas en 'reservation_status_date'.
-    - Columna 'total_stay' creada correctamente.
+    - Se convirtieron correctamente {fechas_convertidas} fechas a formato datetime.
+    - Se creó la columna 'total_stay'.
     """
             secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
 
@@ -257,6 +251,51 @@ def register_callbacks(app):
 
         return html.Div(secciones), df_etl.to_json(date_format='iso', orient='split')
     
+    #Callback para filtros interactivos
+    @app.callback(
+        Output('filtro-pais', 'options'),
+        Input('etl-data', 'data')
+    )
+    def actualizar_dropdown_paises(json_data):
+        if not json_data:
+            return []
+        df = pd.read_json(json_data, orient='split')
+        paises = df['country'].dropna().unique()
+        return [{'label': p, 'value': p} for p in sorted(paises)]
+    
+    # Callback para aplicar filtros
+    @app.callback(
+        Output('filtro-etl-output', 'children'),
+        Input('filtro-aplicar', 'n_clicks'),
+        State('etl-data', 'data'),
+        State('filtro-pais', 'value'),
+        State('filtro-adr', 'value'),
+        prevent_initial_call=True
+    )
+    def aplicar_filtro_etl(n_clicks, json_data, pais, adr_min):
+        if not json_data:
+            return html.Div("⚠️ No hay datos transformados para filtrar.")
+
+        df = pd.read_json(json_data, orient='split')
+
+        if pais:
+            df = df[df['country'] == pais]
+        if adr_min is not None:
+            df = df[df['adr'] >= adr_min]
+
+        if df.empty:
+            return html.Div("⚠️ No hay registros que coincidan con los filtros.")
+
+        return html.Div([
+            html.H6(f"{len(df)} filas coinciden con los filtros aplicados:"),
+            dash_table.DataTable(
+                data=df.head(10).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df.columns],
+                page_size=10,
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left'}
+            )
+        ])
         
     # Callback para el análisis exploratorio de datos (EDA)
     @app.callback(

@@ -9,9 +9,33 @@ def layout():
             dbc.Col(html.H5("Haz clic para aplicar el proceso ETL",  className="my-4"), width=12),
             dbc.Col(dbc.Button("Aplicar ETL", id="apply-etl-btn", color="success", class_name="mb-3"), width="auto")
         ]),
+    #=========FILTROS INTERACTIVOS=========
+        html.Hr(),
+        html.H5("Filtros Interactivos sobre el resultado del ETL"),
+
+        dbc.Row([
+            dbc.Col([
+                html.Label("Filtrar por país:"),
+                dcc.Dropdown(id='filtro-pais', placeholder="Selecciona un país"),
+            ], md=4),
+            dbc.Col([
+                html.Label("ADR mínimo:"),
+                dcc.Input(id='filtro-adr', type='number', placeholder="Ej: 100", min=0),
+            ], md=3),
+            dbc.Col([
+                html.Label(" "),
+                dbc.Button("Aplicar Filtro", id='filtro-aplicar', color='primary', className='mt-2')
+            ], md=3),
+        ], class_name='mb-4'),
+
+        dbc.Row([
+            dbc.Col(html.Div(id='filtro-etl-output'))
+        ]),
+    #=========RESULTADOS=========
         dbc.Row([
             dbc.Col(html.Div(id='etl-output'), width=12)
         ]),
+    #=========EXPORTACIÓN=========
         dbc.Row([
             dbc.Col(dbc.Button("Descargar CSV", id="download-csv-btn", color="primary", class_name="mb-3"), width="auto"),
             dbc.Col(dbc.Button("Descargar JSON", id="download-json-btn", color="primary", class_name="mb-3"), width="auto"),  
