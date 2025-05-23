@@ -487,7 +487,7 @@ def register_callbacks(app):
     def load_from_db(n_clicks, host, port, dbname, user, password, tabla):
         if n_clicks:
             try:
-                # Usar tu controlador para obtener datos
+                # Usar controlador para obtener datos
                 dbManager = DatabaseManager()
                 
                 dbManager.carga_connect(
@@ -1095,8 +1095,9 @@ def register_callbacks(app):
                 labels={'lead_time': 'Días de Anticipación', 'adr': 'Tarifa Diaria Promedio'}
             )
         else:
+            df_filtrado = df[df['adr'] <= 500]
             fig = px.scatter(
-                df,
+                df_filtrado,
                 x='lead_time',
                 y='adr',
                 color='market_segment' if 'market_segment' in df.columns else None,
