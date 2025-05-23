@@ -237,6 +237,22 @@ class PredictiveFeaturesProcessor(DataProcessor):
         except Exception as e:
             print(f"Error en preparación de características predictivas: {e}")
             return df
+        
+class SpecialRequestPredictorPrep(DataProcessor):
+    """
+    Crea una columna binaria 'many_requests' que indica si un cliente tiene más de 2 solicitudes especiales.
+    """
+    def process(self, df):
+        try:
+            if 'total_of_special_requests' in df.columns:
+                df['many_requests'] = (df['total_of_special_requests'] > 2).astype(int)
+                print("Columna 'many_requests' creada exitosamente.")
+            else:
+                print("La columna 'total_of_special_requests' no está disponible.")
+            return df
+        except Exception as e:
+            print(f"Error al crear columna many_requests: {e}")
+            return df        
 
 
 class SeasonalAnalysisProcessor(DataProcessor):
@@ -464,6 +480,7 @@ class HotelDataSystem:
             NormalizerProcessor(),
             FilterProcessor(),
             SeasonalAnalysisProcessor(),
+            SpecialRequestPredictorPrep(),
             PredictiveFeaturesProcessor()
         ]
         self.db_manager = DatabaseManager()

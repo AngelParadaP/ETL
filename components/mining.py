@@ -66,9 +66,9 @@ def layout():
             
 
             # Tab 2: Predicción de Cancelaciones
-            dcc.Tab(label="Predicción de Cancelaciones", children=[
+            dcc.Tab(label="Predicción de Clientes Exigentes", children=[
                 html.Div([
-                    html.H4("Configuración del Modelo Predictivo", className="mt-3"),
+                    html.H4("Modelo para predecir clientes con muchas solicitudes especiales", className="mt-3"),
                     dbc.Row([
                         dbc.Col([
                             html.Label("Variables predictoras:"),
@@ -76,16 +76,15 @@ def layout():
                                 id='prediction-features',
                                 options=[
                                     {'label': 'Lead Time', 'value': 'lead_time'},
-                                    {'label': 'Tipo de Hotel', 'value': 'hotel'},
-                                    {'label': 'Temporada', 'value': 'arrival_date_month'},
-                                    {'label': 'Tipo de Habitación', 'value': 'reserved_room_type'},
-                                    {'label': 'Depósito requerido', 'value': 'deposit_type'},
-                                    {'label': 'ADR', 'value': 'adr'},
-                                    {'label': 'Cliente recurrente', 'value': 'is_repeated_guest'},
-                                    {'label': 'Cancelaciones previas', 'value': 'previous_cancellations'},
-                                    {'label': 'Solicitudes especiales', 'value': 'total_of_special_requests'}
+                                    {'label': 'Número de adultos', 'value': 'adults'},
+                                    {'label': 'Duración total de estadía', 'value': 'total_nights'},
+                                    {'label': 'Segmento de mercado', 'value': 'market_segment'},
+                                    {'label': 'Tipo de habitación', 'value': 'room_type_reserved'},
+                                    {'label': 'Es cliente repetido', 'value': 'repeated_guest'},
+                                    {'label': 'Cantidad de niños', 'value': 'children'},
+                                    {'label': 'Reservas anteriores canceladas', 'value': 'no_of_previous_cancellations'}
                                 ],
-                                value=['lead_time', 'hotel', 'deposit_type', 'adr'],
+                                value=['lead_time', 'total_nights', 'market_segment'],
                                 multi=True
                             )
                         ], width=8),
@@ -102,9 +101,9 @@ def layout():
                             )
                         ], width=4)
                     ], className="mb-4"),
-                    
+
                     dbc.Button("Entrenar Modelo", id="train-model", color="primary", className="mb-4"),
-                    
+
                     dcc.Loading(
                         id="loading-model",
                         children=[
@@ -115,7 +114,7 @@ def layout():
                             ]),
                             html.H4("Reglas del Modelo", className="mt-4"),
                             html.Div(id='model-rules'),
-                            html.H4("Predecir Nuevas Cancelaciones", className="mt-4"),
+                            html.H4("Predicción de Nuevos Clientes", className="mt-4"),
                             html.Div(id='prediction-interface')
                         ],
                         type="circle"

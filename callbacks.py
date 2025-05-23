@@ -1,6 +1,6 @@
 from dash import Input, Output, State, html, dash_table, dcc, no_update
 import pandas as pd
-from ETL import DateProcessor, CleanProcessor, NormalizerProcessor, FilterProcessor, PredictiveFeaturesProcessor, SeasonalAnalysisProcessor
+from ETL import DateProcessor, CleanProcessor, NormalizerProcessor, FilterProcessor, PredictiveFeaturesProcessor, SpecialRequestPredictorPrep, SeasonalAnalysisProcessor
 import base64
 import io
 import plotly.express as px
@@ -275,7 +275,40 @@ def register_callbacks(app):
         except Exception as e:
             secciones.append(dbc.Alert(f"Error en PredictiveFeaturesProcessor: {e}", color="danger"))
 
-        # === Paso 6: Análisis Estacional ===
+        # === Paso 6: Clasificación de clientes exigentes ===
+        try:
+            df_antes = df_etl.copy()
+
+            df_etl = SpecialRequestPredictorPrep().process(df_etl)
+
+            resumen = f"""
+    Clasificación de Clientes Exigentes:
+    - Se creó la columna 'many_requests' (1 si el cliente tiene más de 2 solicitudes especiales).
+    - Valores 1 (exigente): {df_etl['many_requests'].sum()} registros.
+    """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_etl.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en SpecialRequestPredictorPrep: {e}", color="danger"))
+
+        # === Paso 7: Análisis Estacional ===
         try:
             df_antes = df_etl.copy()
             columnas_antes = set(df_antes.columns)
@@ -791,14 +824,14 @@ def register_callbacks(app):
                 )
 
         return html.Div([
-            html.H5("Simular Nueva Reserva"),
+            html.H5("Simular Nuevo Cliente"),
             html.Div(prediction_inputs),
-            dbc.Button("Predecir Probabilidad de Cancelación", id="predict-btn", color="primary", className="mt-3"),
+            dbc.Button("Predecir Cliente Exigente", id="predict-btn", color="primary", className="mt-3"),
             html.Div(id='prediction-result')
         ])
 
 
-    # Callback para el modelo de predicción de cancelaciones
+    # Callback para el modelo de predicción de clientes exigentes
     @app.callback(
         [Output('model-performance', 'children'),
          Output('feature-importance', 'figure'),
@@ -820,7 +853,7 @@ def register_callbacks(app):
         
         # Preprocesamiento
         X = pd.get_dummies(df[features])
-        y = df['is_canceled']
+        y = df['many_requests']  # Variable objetivo
         
         # Entrenar modelo
         if model_type == 'decision_tree':
@@ -852,15 +885,15 @@ def register_callbacks(app):
             feature_imp.head(10),
             x='importance',
             y='feature',
-            title='Importancia de Variables para Predecir Cancelaciones'
+            title='Importancia de Variables para Predecir Clientes Exigentes',
         )
         
         # Matriz de confusión
         cm = confusion_matrix(y, y_pred)
         cm_fig = ff.create_annotated_heatmap(
             z=cm,
-            x=['No Cancelado', 'Cancelado'],
-            y=['No Cancelado', 'Cancelado'],
+            x=['No Exigente', 'Exigente'],
+            y=['No Exigente', 'Exigente'],
             colorscale='Blues',
             showscale=True
         )
@@ -909,7 +942,7 @@ def register_callbacks(app):
         State({'type': 'pred-input', 'index': ALL}, 'value'),
         prevent_initial_call=True
     )
-    def predict_cancelation(n_clicks, model_data, etl_data, features, input_values):
+    def predict_exigente(n_clicks, model_data, etl_data, features, input_values):
         if n_clicks is None:
             return dash.no_update
 
@@ -946,17 +979,17 @@ def register_callbacks(app):
                 model = LogisticRegression(**model_params)
 
             # Reentrenar modelo
-            y_train = df['is_canceled']
+            y_train = df['many_requests']
             model.fit(X_train, y_train)
 
             # Realizar predicción
-            prob_cancel = model.predict_proba(user_input_dummies)[0][1]
+            prob = model.predict_proba(user_input_dummies)[0][1]
 
             return html.Div([
                 html.H5("Resultado de la Predicción"),
                 dbc.Alert(
-                    f"Probabilidad de cancelación: {prob_cancel:.1%}",
-                    color="danger" if prob_cancel > 0.5 else "success"
+                    f"Probabilidad de que el cliente sea exigente (many_requests=1): {prob:.1%}",
+                     color="warning" if prob > 0.5 else "success"
                 ),
                 html.P("Valores ingresados:"),
                 html.Pre(str(user_input.to_dict('records')))
