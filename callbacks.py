@@ -16,7 +16,11 @@ import plotly.figure_factory as ff
 import numpy as np
 import json
 import dash_bootstrap_components as dbc
-from dash import ALL
+from dash import ALL 
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # Función para leer y mostrar el archivo
 def parse_contents(contents, filename):
@@ -680,175 +684,148 @@ def register_callbacks(app):
         return html.Div([
             html.H5("Simular Nueva Reserva"),
             html.Div(prediction_inputs),
-            dbc.Button("Predecir Probabilidad de Cancelación", id="predict-btn", color="primary", className="mt-3"),
+            dbc.Button("Predecir Probabilidad de Ocupación", id="predict-btn", color="primary", className="mt-3"),
             html.Div(id='prediction-result')
         ])
 
-
-    # Callback para el modelo de predicción de cancelaciones
     @app.callback(
         [Output('model-performance', 'children'),
-         Output('feature-importance', 'figure'),
-         Output('confusion-matrix', 'figure'),
-         Output('model-rules', 'children'),
-         Output('prediction-interface', 'children'),
-         Output('mining-models', 'data')],
+        Output('feature-importance', 'figure'),
+        Output('error-analysis-plot', 'figure'),
+        Output('model-rules', 'children'),
+        Output('prediction-interface', 'children'),
+        Output('mining-models', 'data')],
         [Input('train-model', 'n_clicks')],
         [State('prediction-features', 'value'),
-         State('model-type', 'value'),
-         State('etl-data', 'data')],
-         prevent_initial_call=True
+        State('model-type', 'value'),
+        State('etl-data', 'data')],
+        prevent_initial_call=True
     )
-    def train_cancelation_model(n_clicks, features, model_type, etl_data):
+    def train_occupancy_model(n_clicks, features, model_type, etl_data):
         if n_clicks is None or not features:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-            
+
         df = pd.read_json(etl_data, orient='split')
-        
-        # Preprocesamiento
+
+        # Preparar variable objetivo: total de personas
+        df['total_guests'] = df['adults'] + df['children'] + df['babies']
+        df = df[df['is_canceled'] == 0]
+
         X = pd.get_dummies(df[features])
-        y = df['is_canceled']
-        
-        # Entrenar modelo
-        if model_type == 'decision_tree':
-            model = DecisionTreeClassifier(max_depth=4, random_state=42)
-        elif model_type == 'random_forest':
-            model = RandomForestClassifier(n_estimators=100, random_state=42)
-        else:  # logistic
-            model = LogisticRegression(max_iter=1000, random_state=42)
-        
+        y = df['total_guests']  # ahora es ocupación real
+
+        if model_type == 'random_forest':
+            model = RandomForestRegressor(n_estimators=100, random_state=42)
+        else:
+            model = LinearRegression()
+
         model.fit(X, y)
-        
-        # Evaluar modelo
         y_pred = model.predict(X)
-        report = classification_report(y, y_pred, output_dict=True)
-        report_df = pd.DataFrame(report).transpose().reset_index()
-        
-        # Importancia de características
-        if hasattr(model, 'feature_importances_'):
-            importance = model.feature_importances_
-        else:  # Para regresión logística
-            importance = np.abs(model.coef_[0])
-        
+
+        # Métricas de regresión
+        mae = mean_absolute_error(y, y_pred)
+        rmse = np.sqrt(mean_squared_error(y, y_pred))
+        r2 = r2_score(y, y_pred)
+
         feature_imp = pd.DataFrame({
             'feature': X.columns,
-            'importance': importance
+            'importance': model.feature_importances_ if hasattr(model, 'feature_importances_') else np.abs(model.coef_)
         }).sort_values('importance', ascending=False)
-        
+
         imp_fig = px.bar(
             feature_imp.head(10),
             x='importance',
             y='feature',
-            title='Importancia de Variables para Predecir Cancelaciones'
+            title='Importancia de Variables para Predecir Ocupación'
         )
-        
-        # Matriz de confusión
-        cm = confusion_matrix(y, y_pred)
-        cm_fig = ff.create_annotated_heatmap(
-            z=cm,
-            x=['No Cancelado', 'Cancelado'],
-            y=['No Cancelado', 'Cancelado'],
-            colorscale='Blues',
-            showscale=True
-        )
-        cm_fig.update_layout(title='Matriz de Confusión')
-        
-        # Reglas del modelo (solo para árboles)
-        rules = ""
-        if model_type == 'decision_tree':
-            rules = export_text(model, feature_names=list(X.columns))
-            rules = html.Pre(rules)
-        else:
-            rules = html.P("Este modelo no genera reglas explícitas. Ver importancia de características arriba.")
-        
-        # Interfaz de predicción
+
+        metrics = html.Div([
+            html.H4("Desempeño del Modelo de Ocupación"),
+            html.Ul([
+                html.Li(f"MAE: {mae:.2f}"),
+                html.Li(f"RMSE: {rmse:.2f}"),
+                html.Li(f"R² Score: {r2:.2f}")
+            ]),
+            html.P(f"Modelo utilizado: {model_type.title()}")
+        ])
+
+        rules = html.P("Este modelo no genera reglas explícitas.")
+
         prediction_interface = generar_interfaz_prediccion(features, df)
-        
-        # Guardar modelo serializado
+
         model_data = {
             'model_type': model_type,
             'features': features,
             'model_params': json.dumps(model.get_params()),
             'feature_names': list(X.columns)
         }
-        
-        # Mostrar métricas de desempeño
-        metrics = html.Div([
-            html.H4("Desempeño del Modelo"),
-            dash_table.DataTable(
-                data=report_df.to_dict('records'),
-                columns=[{'name': col, 'id': col} for col in report_df.columns],
-                style_table={'overflowX': 'auto'}
-            ),
-            html.P(f"Modelo utilizado: {model_type.replace('_', ' ').title()}")
-        ])
-        
-        return metrics, imp_fig, cm_fig, rules, prediction_interface, model_data
-    
-    
+
+        error_fig = px.scatter(
+            x=y,
+            y=y_pred,
+            labels={'x': 'Valor real', 'y': 'Valor predicho'},
+            title='Comparación de Valores Reales vs Predichos'
+        ).add_shape(
+            type='line',
+            x0=y.min(), y0=y.min(),
+            x1=y.max(), y1=y.max(),
+            line=dict(color='red', dash='dash')
+        )
+
+        return metrics, imp_fig, error_fig, rules, prediction_interface, model_data
+
+
     # Callback para predicción en tiempo real
     @app.callback(
-        Output('prediction-result', 'children'),
-        Input('predict-btn', 'n_clicks'),
-        State('mining-models', 'data'),
-        State('etl-data', 'data'),
-        State('prediction-features', 'value'),
-        State({'type': 'pred-input', 'index': ALL}, 'value'),
-        prevent_initial_call=True
+    Output('prediction-result', 'children'),
+    Input('predict-btn', 'n_clicks'),
+    State('mining-models', 'data'),
+    State('etl-data', 'data'),
+    State('prediction-features', 'value'),
+    State({'type': 'pred-input', 'index': ALL}, 'value'),
+    prevent_initial_call=True
     )
-    def predict_cancelation(n_clicks, model_data, etl_data, features, input_values):
+    def predict_occupancy(n_clicks, model_data, etl_data, features, input_values):
         if n_clicks is None:
             return dash.no_update
 
-        if not model_data or not input_values:
-            return dbc.Alert("Faltan datos del modelo o entradas de usuario.", color="danger")
-
-        if len(input_values) != len(features):
-            return dbc.Alert(
-                f"Se esperaban {len(features)} valores, pero se recibieron {len(input_values)}.",
-                color="danger"
-            )
+        if not model_data or not input_values or len(input_values) != len(features):
+            return dbc.Alert("Verifica que todos los valores hayan sido ingresados correctamente.", color="danger")
 
         try:
-            # Convertir los datos ingresados en un DataFrame
             user_input = pd.DataFrame([input_values], columns=features)
 
-            # Restaurar datos de entrenamiento para asegurar mismo preprocesamiento
             df = pd.read_json(etl_data, orient='split')
+            df['total_guests'] = df['adults'] + df['children'] + df['babies']
+            df = df[df['is_canceled'] == 0]
+
             X_train = pd.get_dummies(df[features])
-            
-            # Aplicar mismo one-hot encoding
             user_input_dummies = pd.get_dummies(user_input)
             user_input_dummies = user_input_dummies.reindex(columns=X_train.columns, fill_value=0)
 
-            # Restaurar el modelo (tipo y parámetros)
             model_type = model_data['model_type']
             model_params = json.loads(model_data['model_params'])
 
-            if model_type == 'decision_tree':
-                model = DecisionTreeClassifier(**model_params)
-            elif model_type == 'random_forest':
-                model = RandomForestClassifier(**model_params)
+            if model_type == 'random_forest':
+                model = RandomForestRegressor(**model_params)
             else:
-                model = LogisticRegression(**model_params)
+                model = LinearRegression(**model_params)
 
-            # Reentrenar modelo
-            y_train = df['is_canceled']
+            y_train = df['total_guests']
             model.fit(X_train, y_train)
 
-            # Realizar predicción
-            prob_cancel = model.predict_proba(user_input_dummies)[0][1]
+            predicted_occupancy = model.predict(user_input_dummies)[0]
 
             return html.Div([
-                html.H5("Resultado de la Predicción"),
+                html.H5("Resultado de la Predicción de Ocupación"),
                 dbc.Alert(
-                    f"Probabilidad de cancelación: {prob_cancel:.1%}",
-                    color="danger" if prob_cancel > 0.5 else "success"
+                    f"Se estima una ocupación de {predicted_occupancy:.0f} huéspedes.",
+                    color="info"
                 ),
                 html.P("Valores ingresados:"),
                 html.Pre(str(user_input.to_dict('records')))
             ])
-        
+
         except Exception as e:
             return dbc.Alert(f"Error al predecir: {str(e)}", color="danger")
 

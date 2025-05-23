@@ -65,27 +65,26 @@ def layout():
             ]),
             
 
-            # Tab 2: Predicción de Cancelaciones
-            dcc.Tab(label="Predicción de Cancelaciones", children=[
+            # Tab 2: Predicción de Ocupación 
+           dcc.Tab(label="Predicción de Ocupación", children=[
                 html.Div([
-                    html.H4("Configuración del Modelo Predictivo", className="mt-3"),
+                    html.H4("Configuración del Modelo de Ocupación", className="mt-3"),
                     dbc.Row([
                         dbc.Col([
                             html.Label("Variables predictoras:"),
-                            dcc.Dropdown(
+                            dcc.Dropdown(   
                                 id='prediction-features',
                                 options=[
-                                    {'label': 'Lead Time', 'value': 'lead_time'},
+                                    {'label': 'Año de llegada', 'value': 'arrival_date_year'},
+                                    {'label': 'Mes de llegada', 'value': 'arrival_date_month'},
                                     {'label': 'Tipo de Hotel', 'value': 'hotel'},
-                                    {'label': 'Temporada', 'value': 'arrival_date_month'},
-                                    {'label': 'Tipo de Habitación', 'value': 'reserved_room_type'},
-                                    {'label': 'Depósito requerido', 'value': 'deposit_type'},
-                                    {'label': 'ADR', 'value': 'adr'},
-                                    {'label': 'Cliente recurrente', 'value': 'is_repeated_guest'},
-                                    {'label': 'Cancelaciones previas', 'value': 'previous_cancellations'},
+                                    {'label': 'ADR (Tarifa Diaria Promedio)', 'value': 'adr'},
+                                    {'label': 'Lead Time', 'value': 'lead_time'},
+                                    {'label': 'Noches en fin de semana', 'value': 'stays_in_weekend_nights'},
+                                    {'label': 'Noches entre semana', 'value': 'stays_in_week_nights'},
                                     {'label': 'Solicitudes especiales', 'value': 'total_of_special_requests'}
                                 ],
-                                value=['lead_time', 'hotel', 'deposit_type', 'adr'],
+                                value=['arrival_date_year', 'arrival_date_month', 'hotel', 'adr'],
                                 multi=True
                             )
                         ], width=8),
@@ -94,16 +93,15 @@ def layout():
                             dcc.Dropdown(
                                 id='model-type',
                                 options=[
-                                    {'label': 'Árbol de Decisión', 'value': 'decision_tree'},
                                     {'label': 'Random Forest', 'value': 'random_forest'},
-                                    {'label': 'Regresión Logística', 'value': 'logistic'}
+                                    {'label': 'Regresión Lineal', 'value': 'linear'}
                                 ],
-                                value='decision_tree'
+                                value='random_forest'
                             )
                         ], width=4)
                     ], className="mb-4"),
                     
-                    dbc.Button("Entrenar Modelo", id="train-model", color="primary", className="mb-4"),
+                    dbc.Button("Entrenar Modelo de Ocupación", id="train-model", color="primary", className="mb-4"),
                     
                     dcc.Loading(
                         id="loading-model",
@@ -111,12 +109,13 @@ def layout():
                             html.Div(id='model-performance'),
                             dbc.Row([
                                 dbc.Col(dcc.Graph(id='feature-importance'), width=6),
-                                dbc.Col(dcc.Graph(id='confusion-matrix'), width=6)
+                                dbc.Col(dcc.Graph(id='error-analysis-plot'), width=6)
                             ]),
-                            html.H4("Reglas del Modelo", className="mt-4"),
+                            html.H4("Notas del Modelo", className="mt-4"),
                             html.Div(id='model-rules'),
-                            html.H4("Predecir Nuevas Cancelaciones", className="mt-4"),
-                            html.Div(id='prediction-interface')
+                            html.H4("Predecir Ocupación para Nuevas Fechas", className="mt-4"),
+                            html.Div(id='prediction-interface'),
+                            html.Div(id='prediction-result', className='mt-4')
                         ],
                         type="circle"
                     )
