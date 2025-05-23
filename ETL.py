@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 import getpass
+from sklearn.preprocessing import MinMaxScaler
 
 class DataProcessor(ABC):
     """
@@ -117,6 +118,52 @@ class CleanProcessor(DataProcessor):
             return df
         except Exception as e:
             print(f"Error durante limpieza: {str(e)}")
+            return df
+        
+class NormalizerProcessor(DataProcessor):
+    """
+    Aplica Min-Max normalization a columnas numéricas como 'adr', 'lead_time' y 'total_stay'
+    """
+    def __init__(self, columns=None):
+        self.columns = columns or ['adr', 'lead_time', 'total_stay']
+
+    def process(self, df):
+        try:
+            df = df.copy()
+            scaler = MinMaxScaler()
+            for col in self.columns:
+                if col in df.columns:
+                    df[f"{col}_norm"] = scaler.fit_transform(df[[col]])
+            print("Normalización completada.")
+            return df
+        except Exception as e:
+            print(f"Error en NormalizerProcessor: {e}")
+            return df
+        
+class FilterProcessor(DataProcessor):
+    """
+    Filtra registros inválidos o irrelevantes, como:
+    - Tarifas (adr) menores o iguales a 0
+    - Reservas sin huéspedes
+    """
+    def process(self, df):
+        try:
+            df = df.copy()
+
+            condiciones = (
+                (df['adr'] > 0) &
+                ((df['adults'] + df['children'].fillna(0) + df['babies'].fillna(0)) > 0)
+            )
+
+            registros_antes = len(df)
+            df_filtrado = df[condiciones]
+            registros_despues = len(df_filtrado)
+
+            print(f"Filtrado aplicado. Filas eliminadas: {registros_antes - registros_despues}")
+            return df_filtrado
+
+        except Exception as e:
+            print(f"Error en FilterProcessor: {e}")
             return df
         
 class PredictiveFeaturesProcessor(DataProcessor):
@@ -414,6 +461,8 @@ class HotelDataSystem:
         self.processors = [
             DateProcessor(),
             CleanProcessor(),
+            NormalizerProcessor(),
+            FilterProcessor(),
             SeasonalAnalysisProcessor(),
             PredictiveFeaturesProcessor()
         ]

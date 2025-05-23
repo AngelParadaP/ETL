@@ -1,6 +1,6 @@
 from dash import Input, Output, State, html, dash_table, dcc, no_update
 import pandas as pd
-from ETL import DateProcessor, CleanProcessor, PredictiveFeaturesProcessor, SeasonalAnalysisProcessor
+from ETL import DateProcessor, CleanProcessor, NormalizerProcessor, FilterProcessor, PredictiveFeaturesProcessor, SeasonalAnalysisProcessor
 import base64
 import io
 import plotly.express as px
@@ -165,7 +165,81 @@ def register_callbacks(app):
         except Exception as e:
             secciones.append(dbc.Alert(f"Error en CleanProcessor: {e}", color="danger"))
 
-        # === Paso 3: Variables predictivas ===
+        # === Paso 3: Normalización ===
+        try:
+            df_antes = df_etl.copy()
+            columnas_antes = set(df_antes.columns)
+
+            df_etl = NormalizerProcessor().process(df_etl)
+
+            columnas_despues = set(df_etl.columns)
+            nuevas_columnas = columnas_despues - columnas_antes
+
+            resumen = f"""
+        Normalización:
+        - Se aplicó Min-Max normalization a las columnas numéricas seleccionadas.
+        - Columnas añadidas: {', '.join(nuevas_columnas) if nuevas_columnas else 'ninguna'}.
+        """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_etl.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en NormalizerProcessor: {e}", color="danger"))
+
+        # === Paso 4: Filtrado de registros inválidos ===
+        try:
+            df_antes = df_etl.copy()
+            filas_antes = len(df_antes)
+
+            df_etl = FilterProcessor().process(df_etl)
+
+            filas_despues = len(df_etl)
+            filas_eliminadas = filas_antes - filas_despues
+
+            resumen = f"""
+        Filtrado de Registros:
+        - Se eliminaron {filas_eliminadas} filas con valores inválidos.
+        - Criterios: adr > 0 y al menos 1 huésped (adulto, niño o bebé).
+        """
+            secciones.append(dbc.Alert(html.Pre(resumen.strip()), color="light"))
+
+            secciones.append(html.P("Antes:"))
+            secciones.append(dash_table.DataTable(
+                data=df_antes.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_antes.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.P("Después:"))
+            secciones.append(dash_table.DataTable(
+                data=df_etl.head(3).to_dict('records'),
+                columns=[{'name': i, 'id': i} for i in df_etl.columns],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'minWidth': '80px'},
+                page_size=3
+            ))
+            secciones.append(html.Hr())
+        except Exception as e:
+            secciones.append(dbc.Alert(f"Error en FilterProcessor: {e}", color="danger"))
+
+        # === Paso 5: Variables predictivas ===
         try:
             df_antes = df_etl.copy()
             columnas_antes = set(df_antes.columns)
@@ -201,7 +275,7 @@ def register_callbacks(app):
         except Exception as e:
             secciones.append(dbc.Alert(f"Error en PredictiveFeaturesProcessor: {e}", color="danger"))
 
-        # === Paso 4: Análisis Estacional ===
+        # === Paso 6: Análisis Estacional ===
         try:
             df_antes = df_etl.copy()
             columnas_antes = set(df_antes.columns)
