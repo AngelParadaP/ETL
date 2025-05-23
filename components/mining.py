@@ -76,13 +76,12 @@ def layout():
                                 id='prediction-features',
                                 options=[
                                     {'label': 'Lead Time', 'value': 'lead_time'},
-                                    {'label': 'Número de adultos', 'value': 'adults'},
+                                    {'label': 'Tarifa Diaria (ADR)', 'value': 'adr'},
                                     {'label': 'Duración total de estadía', 'value': 'total_nights'},
                                     {'label': 'Segmento de mercado', 'value': 'market_segment'},
+                                    {'label': 'Tipo de Cliente', 'value': 'customer_type'},
                                     {'label': 'Tipo de habitación', 'value': 'room_type_reserved'},
-                                    {'label': 'Es cliente repetido', 'value': 'repeated_guest'},
-                                    {'label': 'Cantidad de niños', 'value': 'children'},
-                                    {'label': 'Reservas anteriores canceladas', 'value': 'no_of_previous_cancellations'}
+                                    {'label': 'Es cliente repetido', 'value': 'is_repeated_guest'},
                                 ],
                                 value=['lead_time', 'total_nights', 'market_segment'],
                                 multi=True
